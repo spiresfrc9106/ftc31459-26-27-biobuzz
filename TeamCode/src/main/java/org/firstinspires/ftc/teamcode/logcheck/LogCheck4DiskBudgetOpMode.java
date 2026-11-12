@@ -1,6 +1,7 @@
 package org.firstinspires.ftc.teamcode.logcheck;
 
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
+import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
 import io.github.mikestitt.corbelsflightlog.FlightLog;
@@ -19,7 +20,8 @@ import java.io.File;
  * <p>The budget is restored when this stops, so it cannot leave the robot with
  * a 1 MB cap.
  */
-@TeleOp(name = "Log 4: disk budget", group = "LogCheck")
+@Disabled
+@TeleOp(name = "Log 4: disk budget", group = "4 LogCheck")
 public class LogCheck4DiskBudgetOpMode extends OpMode {
 
     private static final long TEST_BUDGET_BYTES = 1_000_000;

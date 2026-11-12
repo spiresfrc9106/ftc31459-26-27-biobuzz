@@ -15,6 +15,7 @@ import com.pedropathing.math.Twist;
 import com.pedropathing.math.Vector2D;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
+import org.firstinspires.ftc.teamcode.pedro.Constants;
 
 import java.lang.reflect.Proxy;
 import java.util.ArrayList;
@@ -27,23 +28,45 @@ import java.util.function.Supplier;
 /**
  * A real Pedro {@link Follower} driving a simulated robot, for tests.
  *
- * <p>The localizer turns forward, strafe and turn into motion (power x max
- * speed, with a short lag standing in for inertia) and integrates a pose.
+ * <p>The localizer turns forward, strafe and turn into motion (speed x max
+ * speed, less static friction, with a short lag standing in for inertia) and
+ * integrates a pose.
  * Crude physics, but enough for the follower to finish a path the way it does
  * on the robot.
  *
  * <p>Where those three numbers come from is the caller's choice. On its own
  * this class uses what Pedro last commanded, which is all a follower test
- * needs. {@code OpModeHarness} points it at the four motor powers instead, so
+ * needs. {@code OpModeHarness} points it at the four motor speeds instead, so
  * a lesson that writes the motors itself moves too -- see
  * {@link #fromWheels}.
  */
 public final class SimRobot {
 
     public static final double MAX_FORWARD_IPS = 64.4;
-    public static final double MAX_STRAFE_IPS = 43.6;
+
+    /**
+     * The angle between the forward direction and the way a wheel's rollers
+     * push the robot, in degrees. 45 by design; the robot strafes as if it
+     * were 40, so the same rim speed moves it less sideways than forward.
+     */
+    public static final double WHEEL_ANGLE_DEG = 40.0;
+
+    /** A wheel's rim speed for each inch per second of strafe is cot of the angle. */
+    public static final double COT_WHEEL_ANGLE = 1 / Math.tan(Math.toRadians(WHEEL_ANGLE_DEG));
+
+    /** Full power strafing turns each rim at full speed, which moves the robot tan of the angle of that. */
+    public static final double MAX_STRAFE_IPS = MAX_FORWARD_IPS / COT_WHEEL_ANGLE;
     public static final double MAX_TURN_RADPS = 4.0;
     public static final double LAG_S = 0.15;
+
+    /**
+     * Static friction on each axis, forward, strafe and turn, as the power it
+     * takes before the robot moves at all. Guesses, so L153's fit has a kS to
+     * find; see {@link #overFriction}.
+     */
+    public static final double KS_FORWARD = 0.05;
+    public static final double KS_STRAFE = 0.08;
+    public static final double KS_TURN = 0.06;
 
     public final SimDrive drive = new SimDrive();
     public final SimLocalizer localizer;
@@ -65,14 +88,14 @@ public final class SimRobot {
     }
 
     /**
-     * Four wheel powers back into forward, strafe and turn: the exact inverse
-     * of {@code CorbelsMecanum.mix}, which writes
+     * Four wheel speeds back into forward, strafe and turn: the exact inverse
+     * of {@code CorbelsMecanum.mixArcadeToWheelSpeeds}, which writes
      * {@code fl = f - s - t, fr = f + s + t, bl = f + s - t, br = f - s + t}.
      * Substituting those four here returns f, s and t unchanged.
      *
-     * <p>Wheel powers, not wheel speeds, because the motion model's input is a
-     * power. A wheel at positive power drives the robot forward: the motor's
-     * own direction is set from {@code Constants} and is taken to be right.
+     * <p>Fractions of full speed, not wheel speeds in inches per second,
+     * because the motion model's input is a fraction of full speed. A wheel at
+     * positive speed drives the robot forward: the motor's own direction is set from {@code Constants} and is taken to be right.
      */
     public static double[] fromWheels(double frontLeft, double frontRight,
                                       double backLeft, double backRight) {
@@ -80,6 +103,16 @@ public final class SimRobot {
                 (frontLeft + frontRight + backLeft + backRight) / 4,
                 (-frontLeft + frontRight + backLeft - backRight) / 4,
                 (-frontLeft + frontRight - backLeft + backRight) / 4};
+    }
+
+    /**
+     * What is left of a power once static friction {@code kS} has taken its
+     * share: nothing up to {@code kS}, and above it (power - kS) / (1 - kS), so
+     * full power still gives full speed. The sign stays the power's.
+     */
+    public static double overFriction(double power, double kS) {
+        double over = Math.max(0, Math.abs(power) - kS) / (1 - kS);
+        return Math.copySign(over, power);
     }
 
     public static final PoseFactory POSES = PoseFactory.degrees();
@@ -113,7 +146,7 @@ public final class SimRobot {
     /**
      * The drivetrain Pedro is given. It records what Pedro asked for and hands
      * the same request on to {@link #delegate}, the drivetrain the lesson
-     * built, so the powers reach the motors the way they do on the robot.
+     * built, so the speeds reach the motors the way they do on the robot.
      */
     public static final class SimDrive implements Drivetrain {
         volatile DrivePowers last = DrivePowers.zero();
@@ -122,9 +155,9 @@ public final class SimRobot {
         public volatile Drivetrain delegate;
 
         @Override
-        public void drive(DrivePowers powers, boolean manual) {
-            last = powers;
-            if (delegate != null) delegate.drive(powers, manual);
+        public void drive(DrivePowers speeds, boolean manual) {
+            last = speeds;
+            if (delegate != null) delegate.drive(speeds, manual);
         }
 
         @Override
@@ -164,6 +197,13 @@ public final class SimRobot {
         private double vx;
         private double vy;
         private double omega;
+        /** How far the robot has really turned, which {@link #setPose} does not change. */
+        private double turned;
+        /** How far each wheel has rolled, front left, front right, back left, back right, inches. */
+        private final double[] rolled = new double[4];
+        /** How far the robot has moved along its own forward and leftward, inches. */
+        private double forwardTravel;
+        private double strafeTravel;
         private long lastNs;
         private MotionState state = MotionState.zero();
 
@@ -174,12 +214,58 @@ public final class SimRobot {
         }
 
         /**
-         * Where forward, strafe and turn come from. Pass the four motor powers
+         * Where forward, strafe and turn come from. Pass the four motor speeds
          * through {@link SimRobot#fromWheels} to drive the simulation from what
          * the code actually wrote to the wheels.
          */
         public void driveFrom(Supplier<double[]> chassisVelocitySupplier) {
             this.chassisVelocitySupplier = chassisVelocitySupplier;
+        }
+
+        /**
+         * How far the robot has turned since it was made, counter-clockwise, in
+         * radians, unwrapped. An IMU measures this; a localizer's pose is only
+         * what it was told plus what it saw.
+         */
+        public double turnedRadians() {
+            return turned;
+        }
+
+        /** The simulated clock, in seconds. */
+        double seconds() {
+            return clock.getAsLong() / 1e9;
+        }
+
+        /**
+         * How fast each wheel's rim is moving, front left, front right, back
+         * left, back right, in inches per second: the robot's motion put back
+         * through {@link WheelTargets#forMecanum}, with the strafe times
+         * {@link #COT_WHEEL_ANGLE}. A localizer that takes the wheels to be at
+         * 45 degrees reads more strafe than the robot made.
+         * {@code Constants.turnRadiusInches} is taken as the radius the turn
+         * really has, so turning on the spot reads true.
+         */
+        public double[] wheelSpeeds() {
+            return WheelTargets.forMecanum(vx, vy * COT_WHEEL_ANGLE, omega, Constants.turnRadiusInches);
+        }
+
+        /** How far each wheel has rolled since the robot was made, in inches, in the same order. */
+        public double rolledInches(int wheel) {
+            return rolled[wheel];
+        }
+
+        /**
+         * How far the robot has moved forward along itself since it was made,
+         * in inches, which {@link #setPose} does not change. A pod at its middle
+         * would read this.
+         */
+        public double forwardInches() {
+            return forwardTravel;
+        }
+
+        /** How far the robot has moved to its own left since it was made, in inches. */
+        public double strafeInches() {
+            return strafeTravel;
         }
 
         @Override
@@ -208,12 +294,17 @@ public final class SimRobot {
             lastNs = now;
             double k = Math.min(1, dt / LAG_S);
             double[] c = chassisVelocitySupplier.get();
-            vx += (c[0] * MAX_FORWARD_IPS - vx) * k;
-            vy += (c[1] * MAX_STRAFE_IPS - vy) * k;
-            omega += (c[2] * MAX_TURN_RADPS - omega) * k;
+            vx += (overFriction(c[0], KS_FORWARD) * MAX_FORWARD_IPS - vx) * k;
+            vy += (overFriction(c[1], KS_STRAFE) * MAX_STRAFE_IPS - vy) * k;
+            omega += (overFriction(c[2], KS_TURN) * MAX_TURN_RADPS - omega) * k;
             x += (vx * Math.cos(heading) - vy * Math.sin(heading)) * dt;
             y += (vx * Math.sin(heading) + vy * Math.cos(heading)) * dt;
             heading += omega * dt;
+            turned += omega * dt;
+            forwardTravel += vx * dt;
+            strafeTravel += vy * dt;
+            double[] speeds = wheelSpeeds();
+            for (int i = 0; i < 4; i++) rolled[i] += speeds[i] * dt;
             state = MotionState.ofTwist(POSES.of(x, y, Math.toDegrees(heading)), new Twist(vx, vy, omega));
         }
     }
@@ -221,27 +312,33 @@ public final class SimRobot {
     /**
      * What the Driver Station shows, and how it loses what it is not shown.
      *
-     * <p>FTC's {@code Telemetry} defaults to {@code setAutoClear(true)}, so
-     * {@code update()} transmits the buffer and empties it. A second
-     * {@code update()} in the same loop therefore transmits nothing and throws
-     * away what the first one sent, which is why {@code Tracker} owns the only
-     * flush. This fake behaves the same way, so a test can watch it happen.
+     * <p>FTC's {@code Telemetry} defaults to {@code setAutoClear(true)}, which
+     * in SDK 12.0.0's {@code TelemetryImpl} means {@code update()} transmits the
+     * buffer and keeps it, and the first line added after an {@code update()}
+     * empties it. An {@code update()} with nothing added sends the same lines
+     * again. This fake behaves the same way, so a test can watch it happen.
      */
     public static final class DriverStation {
         private final List<String> pending = new ArrayList<>();
         private List<String> shown = new ArrayList<>();
+        private boolean clearOnAdd = false;
 
         void add(String line) {
+            if (clearOnAdd) {
+                pending.clear();
+                clearOnAdd = false;
+            }
             pending.add(line);
         }
 
         void transmit() {
             shown = new ArrayList<>(pending);
-            pending.clear();
+            clearOnAdd = true;
         }
 
         void clearPending() {
             pending.clear();
+            clearOnAdd = false;
         }
 
         /** The lines the driver can see now, from the last transmission. */

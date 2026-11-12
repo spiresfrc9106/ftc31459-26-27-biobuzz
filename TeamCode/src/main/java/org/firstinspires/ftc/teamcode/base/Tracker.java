@@ -8,13 +8,17 @@ import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 
 import io.github.mikestitt.corbelsflightlog.FlightLog;
 import io.github.mikestitt.corbelsflightlog.ftc.FtcFlightLog;
+import io.github.mikestitt.corbelsflightlog.nt.Nt4Server;
 import io.github.mikestitt.corbelsflightlog.pedro.PedroFlightLog;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.teamcode.panels.PanelsLogger;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
 
 /**
  * Where everything the robot has to say goes: a graph in Panels, a line on the
@@ -40,9 +44,9 @@ import java.util.Map;
  * {@link #printPoseSpeedLoopToDs}.
  *
  * <p><b>Never call {@code telemetry} yourself.</b> FTC's {@code Telemetry}
- * clears its buffer every time it is flushed, and this class flushes once at the
- * end of each loop; a second flush inside the loop drops whatever the first one
- * sent. A build check enforces it.
+ * clears its buffer at the first line added after a flush, and this class
+ * flushes once at the end of each loop; a flush inside the loop loses every line
+ * printed before it as soon as another is printed. A build check enforces it.
  *
  * <p><b>Panels can be switched off</b> with {@link #enablePanels}, for a match
  * where Wi-Fi is not wanted. Publishing still reaches the file and
@@ -68,11 +72,32 @@ public final class Tracker {
 
     private static final Map<String, Object> values = new LinkedHashMap<>();
 
+    /**
+     * The lines printed during init(), added again on each pass between INIT
+     * and PLAY. The SDK sends nothing after init(), and the first line added
+     * after a send clears the screen, so a line printed only once in init()
+     * would be gone as soon as init_loop() printed anything.
+     */
+    private static final List<String> initLines = new ArrayList<>();
+    private static boolean printingInit = false;
+
+    /** Whether live NetworkTables is switched on, off, or not yet either. */
+    public enum LiveSetting { NOT_SET, ON, OFF }
+
+    /**
+     * Set by the Live NetworkTables switch OpMode. Not cleared by {@link #begin},
+     * so it lasts from one OpMode to the next until the app restarts.
+     */
+    private static LiveSetting liveSetting = LiveSetting.NOT_SET;
+
+    /** Where the live server comes from. Tests hand in their own. */
+    static Callable<Nt4Server> liveServers = Nt4Server::shared;
+
     private static long loopCount;
     private static long lastLoopNs;
     private static long startNs;
-    private static double loopPeriodMs;
-    private static double maxLoopPeriodMs;
+    private static double period_ms;
+    private static double maxPeriod_ms;
 
     private Tracker() {
     }
@@ -91,14 +116,72 @@ public final class Tracker {
         loopCount = 0;
         lastLoopNs = 0L;
         startNs = System.nanoTime();
-        loopPeriodMs = 0.0;
-        maxLoopPeriodMs = 0.0;
+        period_ms = 0.0;
+        maxPeriod_ms = 0.0;
         panels = null;
         logger = null;
         panelsEnabled = true;
         ds = opMode == null ? null : opMode.telemetry;
+        initLines.clear();
+        printingInit = true;
         flightlog = FtcFlightLog.open(opMode);
         pedro = new PedroFlightLog(flightlog, "Robot");
+    }
+
+    /**
+     * Sends everything the file records live to AdvantageScope as well, over
+     * NetworkTables 4 on port 5810: on the robot, connect AdvantageScope to
+     * {@code 192.168.43.1}. For a competition OpMode, which calls this itself
+     * after {@code initBefore()}: it serves only when the switch OpMode has set
+     * {@link #liveSetting} on. {@link #begin} switches it off again.
+     *
+     * <p>For practice only: FTC rule R704 forbids third-party telemetry over
+     * Wi-Fi at competitions. Says on the Driver Station whether it is on, and
+     * returns false, with the reason, if the server cannot start.
+     */
+    public static boolean serveLive() {
+        boolean servedWhenNotSet = false;
+        boolean serving = serveLive(servedWhenNotSet);
+        return serving;
+    }
+
+    /**
+     * {@link #serveLive()} for a lesson, a copy in {@code mytry}, or a check of
+     * the server itself: it serves unless the switch OpMode has set
+     * {@link #liveSetting} off. {@code initBefore()} calls it for a lesson.
+     */
+    public static boolean serveLiveUnlessSwitchedOff() {
+        boolean servedWhenNotSet = true;
+        boolean serving = serveLive(servedWhenNotSet);
+        return serving;
+    }
+
+    private static boolean serveLive(boolean servedWhenNotSet) {
+        boolean switchedOn = liveSetting == LiveSetting.ON;
+        boolean notSet = liveSetting == LiveSetting.NOT_SET;
+        boolean wanted = switchedOn || (notSet && servedWhenNotSet);
+        if (!wanted) {
+            printToDs("Live NetworkTables off");
+            return false;
+        }
+        try {
+            flightlog.mirrorTo(liveServers.call());
+            printToDs("Live NetworkTables on. AdvantageScope: connect to 192.168.43.1");
+            return true;
+        } catch (Exception e) {
+            printToDs("NetworkTables off: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /** What the switch OpMode last set, or {@code NOT_SET} since the app started. */
+    public static LiveSetting liveSetting() {
+        return liveSetting;
+    }
+
+    /** Set by the switch OpMode, and kept until the app restarts. */
+    public static void setLive(LiveSetting setting) {
+        liveSetting = setting;
     }
 
     /** Panels and its logger. Called from {@code CorbelsOpMode.startBefore()}. */
@@ -118,17 +201,17 @@ public final class Tracker {
     public static void endLoop(Follower follower) {
         long now = System.nanoTime();
         if (lastLoopNs != 0L) {
-            loopPeriodMs = (now - lastLoopNs) / 1_000_000.0;
+            period_ms = (now - lastLoopNs) / 1_000_000.0;
         }
         lastLoopNs = now;
         loopCount++;
-        if (loopPeriodMs > maxLoopPeriodMs) {
-            maxLoopPeriodMs = loopPeriodMs;
+        if (period_ms > maxPeriod_ms) {
+            maxPeriod_ms = period_ms;
         }
 
         publish("loop/count", loopCount);
-        publish("loop/period_ms", loopPeriodMs);
-        publish("loop/max_period_ms", maxLoopPeriodMs);
+        publish("loop/period_ms", period_ms);
+        publish("loop/maxPeriod_ms", maxPeriod_ms);
         publish("loop/rate_hz", loopRateHz());
         publish("loop/uptime_s", (now - startNs) / 1_000_000_000.0);
 
@@ -143,6 +226,27 @@ public final class Tracker {
         if (ds != null) {
             ds.update();
         }
+    }
+
+    /**
+     * Adds init()'s lines below this pass's own, then closes the file's record
+     * for one pass between INIT and PLAY, without counting it as a loop.
+     * Called from {@code CorbelsOpMode.init_loop()}.
+     */
+    public static void endInitLoop() {
+        for (String line : initLines) {
+            if (ds != null) ds.addLine(line);
+        }
+        flightlog.endLoop();
+    }
+
+    /**
+     * The end of init(): the lines printed since {@link #begin} are kept and
+     * shown below init_loop()'s own on each pass. Called from
+     * {@code CorbelsOpMode.initAfter()}.
+     */
+    public static void endInit() {
+        printingInit = false;
     }
 
     /** Closes the file. Called from {@code CorbelsOpMode.stopAfter()}. */
@@ -191,8 +295,12 @@ public final class Tracker {
 
     // ------------------------------------------------------------ the driver's screen
 
-    /** One line of text. */
+    /** One line of text. During init(), kept and shown on each pass until PLAY. */
     public static void printToDs(String line) {
+        if (printingInit) {
+            initLines.add(line);
+            return;
+        }
         if (ds != null) ds.addLine(line);
     }
 
@@ -239,7 +347,7 @@ public final class Tracker {
             printToDs("Speed  %.1f in/s",
                     Math.hypot(follower.velocity().vx, follower.velocity().vy));
         }
-        printToDs("Loop  #%d  %.1f ms (max %.1f)", loopCount, loopPeriodMs, maxLoopPeriodMs);
+        printToDs("Loop  #%d  %.1f ms (max %.1f)", loopCount, period_ms, maxPeriod_ms);
     }
 
     // ------------------------------------------------------------ the loop and Panels
@@ -251,17 +359,17 @@ public final class Tracker {
 
     /** How long the last loop took. */
     public static double loopPeriodMs() {
-        return loopPeriodMs;
+        return period_ms;
     }
 
     /** The longest loop so far. */
     public static double maxLoopPeriodMs() {
-        return maxLoopPeriodMs;
+        return maxPeriod_ms;
     }
 
     /** Loops per second, from the last loop's period. 0 before the first one ends. */
     public static double loopRateHz() {
-        return loopPeriodMs > 0.0 ? 1000.0 / loopPeriodMs : 0.0;
+        return period_ms > 0.0 ? 1000.0 / period_ms : 0.0;
     }
 
     /**

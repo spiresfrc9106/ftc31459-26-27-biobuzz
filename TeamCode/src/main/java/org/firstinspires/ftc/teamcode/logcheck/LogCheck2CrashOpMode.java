@@ -1,6 +1,7 @@
 package org.firstinspires.ftc.teamcode.logcheck;
 
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
+import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
 import io.github.mikestitt.corbelsflightlog.FlightLog;
@@ -17,7 +18,8 @@ import io.github.mikestitt.corbelsflightlog.ftc.FtcFlightLog;
  * in AdvantageScope with about three seconds of data.
  * FAIL: the file is missing, empty, or unreadable.
  */
-@TeleOp(name = "Log 2: crash mid-run", group = "LogCheck")
+@Disabled
+@TeleOp(name = "Log 2: crash mid-run", group = "4 LogCheck")
 public class LogCheck2CrashOpMode extends OpMode {
 
     private static final double CRASH_AFTER_SECONDS = 3.0;

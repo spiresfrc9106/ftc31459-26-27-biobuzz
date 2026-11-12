@@ -1,0 +1,97 @@
+package org.firstinspires.ftc.teamcode.lessons;
+
+import static com.pedropathing.api.Paths.line;
+import static com.pedropathing.ivy.groups.Groups.sequential;
+import static com.pedropathing.ivy.pedro.PedroCommands.follow;
+
+import com.pedropathing.api.PoseFactory;
+import com.pedropathing.ivy.Command;
+import com.pedropathing.ivy.Scheduler;
+import com.pedropathing.math.Pose;
+import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
+import com.qualcomm.robotcore.eventloop.opmode.Disabled;
+
+import org.firstinspires.ftc.teamcode.base.CorbelsAuto;
+import org.firstinspires.ftc.teamcode.base.CorbelsMecanum;
+import org.firstinspires.ftc.teamcode.base.Tracker;
+
+/**
+ * L130: two legs in a row. Drive forward, then slide sideways to the right
+ * without turning, and hold there.
+ *
+ * <p>{@code start} schedules the drive as a command, and the follower does the
+ * driving.
+ *
+ * <p>Passes when: LessonsTest.l130_autoDrivesForwardThenStrafesSideways
+ */
+@Autonomous(name = "L130 Forward Then Strafe", group = "Lessons")
+// When on L130S020, see
+// https://coding.stitt.cc/ftc-lessons-java/guide/tasks/l130.html#l130s020
+// for what to do here.
+@Disabled
+// 'public' so the robot can run this OpMode. 'public' allows access from any code.
+public class L130ForwardThenStrafeOpMode extends CorbelsAuto {
+
+    PoseFactory poses = PoseFactory.degrees();
+
+    double robotHalfLength_in = 9.0;
+    double fieldPerimeterWidth_in = 1.5;
+    double botStartY_in = robotHalfLength_in + fieldPerimeterWidth_in;
+    Pose start = poses.of(72.0, botStartY_in, 90.0);
+    Pose corner = poses.of(72.0, 72.0, 90.0);
+    Pose end = poses.of(96.0, 72.0, 90.0);
+
+    CorbelsMecanum drivetrain;
+
+    // 'public' to match the parent class. 'public' allows access from any code.
+    @Override
+    public void init() {
+        initBefore();
+        drivetrain = new CorbelsMecanum(hardware);
+        initAfter(drivetrain);
+    }
+
+    // 'public' to match the parent class. 'public' allows access from any code.
+    @Override
+    public void start() {
+        startBefore();
+        Command forwardThenStrafe = driveForwardThenStrafe();
+        Scheduler.schedule(forwardThenStrafe);
+        startAfter();
+    }
+
+    /**
+     * The scheduler runs the drive from inside {@code loopAfter()}. The
+     * one line here is for the driver's screen, which shows nothing unless a
+     * lesson asks it to.
+     */
+    // 'public' to match the parent class. 'public' allows access from any code.
+    @Override
+    public void loop() {
+        loopBefore();
+        Tracker.printPoseSpeedLoopToDs(follower);
+        loopAfter();
+    }
+
+    // 'public' to match the parent class. 'public' allows access from any code.
+    @Override
+    public void stop() {
+        stopAfter();
+    }
+
+    // 'public' to match the parent class. 'public' allows access from any code.
+    @Override
+    public Pose startPose() {
+        return start;
+    }
+
+    Command driveForwardThenStrafe() {
+        Command forwardThenStrafeRoute = sequential(
+                follow(follower, line(start, corner).constant(start))
+                // When on L130S030, see
+                // https://coding.stitt.cc/ftc-lessons-java/guide/tasks/l130.html#l130s030
+                // for what to do here.
+        );
+        return forwardThenStrafeRoute;
+    }
+}

@@ -5,49 +5,71 @@ How to run a lesson on a laptop and watch the robot move in AdvantageScope.
 ## What it is
 
 The lessons are real OpModes, and the simulator runs them with fake hardware. `OpModeHarness` gives
-an OpMode four fake motors, a fake IMU and a fake battery, and `SimRobot` turns whatever power
+an OpMode four fake motors, a fake IMU and a fake battery, and `SimRobot` turns whatever speed
 reaches those motors into motion. Nothing here runs on the robot: it all lives in `TeamCode`'s test
-sources, and NetworkTables is a `testImplementation` dependency, so none of it can reach a Control
-Hub.
+sources, and WPILib's NetworkTables is a `testImplementation` dependency, so none of it can reach a
+Control Hub. The NetworkTables server is the robot's own, `Nt4Server` from corbelsflightlog, with
+the run's flight log mirrored onto it as on the robot; [NETWORKTABLES.md](./NETWORKTABLES.md) says
+how the robot serves it.
 
 Two ways to run it:
 
 | Way | What it is for |
 |---|---|
-| `./gradlew :TeamCode:test` | The tests. They drive the sticks in code and assert where the robot ended up |
-| `./gradlew :TeamCode:simRun` | Watching. One lesson, running until Ctrl-C, published to AdvantageScope |
+| `./gradlew :TeamCode:test` | Everything except the lessons package. They drive the sticks in code and assert where the robot ended up |
+| `./gradlew :TeamCode:testLessons` | The lessons package alone. On the lessons line most of it fails, because the blanks are open |
+| `./gradlew :TeamCode:simRun` | Watching. One OpMode, running until Ctrl-C, published to AdvantageScope |
 
 ## Watching a lesson
 
 Start the simulator:
 
 ```
-./gradlew :TeamCode:simRun --args="L2bTankOpMode left_stick_y=-1 right_stick_y=-1"
+./gradlew :TeamCode:simRun --args="lessons.L040TankOpMode --left_stick_y=-1 --right_stick_y=-1"
 ```
 
-The first argument is a lesson's class name without its package; leave it off and you get
-`L15CombinedOpMode`. Everything after it sets a field of `gamepad1` by that field's own name, so
-`left_stick_y=-1` is the left stick pushed fully forward, and `a=true` is the A button held. The
-values are set once and held for the whole run. Driving the sticks while it runs is
-`sim.sticks.input` in the workspace's `open-work.md`, and is not built yet.
+The first argument is the OpMode's class name after `org.firstinspires.ftc.teamcode`, so a lesson is
+`lessons.L040TankOpMode`, a student's copy of one is `mytry.L020SticksOpMode`, and a simulator teleop
+is `base.SimOpModes$Tank`. Leaving it off is an
+error, not a default. Every option after it is `--name=value` naming one of the 21 controls a
+gamepad has, so `--left_stick_y=-1` is the left stick pushed fully forward and `--a=true` is the A
+button held. A control is held from before the run starts, so `--a=true` fires `aWasPressed()` on
+the first loop and not again.
 
-It prints the port it is listening on and then runs:
+`--args="--help"` prints all of it, including which field names are refused and why.
+
+`--init` stays in INIT, as the Driver Station does between its INIT and start buttons:
+`init_loop()` runs again and again, and the Driver Station's lines print in the terminal when they
+change. Enter starts the OpMode. An autonomous whose menu is worked during INIT, as L135's is, runs
+this way.
+
+To push the sticks yourself instead, plug a gamepad in and use `--pad`. `--pad-check` reports what a
+gamepad is doing without running an OpMode, so it can run beside one.
+
+It prints where the flight log goes and then runs, serving NetworkTables 4 on port 5810:
 
 ```
-NT: Listening on NT3 port 1735, NT4 port 5810
-L2bTankOpMode running. Connect AdvantageScope to 127.0.0.1 as NetworkTables 4, and Ctrl-C to stop.
+Flight log: <the repository's top folder>
+lessons.L040TankOpMode running. Connect AdvantageScope to 127.0.0.1 as NetworkTables 4, and Ctrl-C to stop.
 ```
 
-Point AdvantageScope at `127.0.0.1` and it will find the topics under `sim/`. Add a 2D field and
-give it `sim/Pose`, and the robot drives up the field. Watched on 2026-09-28. The menu path for
-setting the address is still not written down here: whoever drove those menus did it by hand and the
-path was not captured.
+Point AdvantageScope at `127.0.0.1` and it will find the topics under `sim/`. In AdvantageScope
+26.0.2 that is **File > Connect to Simulator > NetworkTables 4**. Choose it before starting `simRun`
+and the window waits, titled `127.0.0.1 (Searching)`, until the server comes up. Add a 2D field and
+give it `sim/Pose`, and the robot drives up the field. The **Field** list keeps the FTC fields in
+their own group below the FRC ones; **2026-2027 Field** is this season's, and choosing it shows a
+notice that FTC fields are experimental.
 
-Ctrl-C stops it. It closes the flight log on the way out and prints where it left it.
+An autonomous can be over before a field is set up by hand. Its flight log replays the run. Stop `simRun` with Ctrl-C, open the
+`.wpilog` it wrote into the repository's top folder in AdvantageScope, and drag `Robot/Pose` onto the field. `Robot/Path` dragged
+beside it and switched to **Trajectory** from its icon draws the line the robot was told to follow.
+
+Ctrl-C stops it. The flight log goes in the repository's top folder, where `.gitignore` keeps it
+out of git, and `simRun` names that folder before anything else, as `Flight log: <folder>`.
 
 ## What gets published
 
-Everything is under `sim/`.
+What the simulated robot is doing is under `sim/`.
 
 | Topic | What it is |
 |---|---|
@@ -57,25 +79,28 @@ Everything is under `sim/`.
 | `sim/stick/leftY`, `leftX`, `rightY`, `rightX` | What the driver is holding |
 | `sim/vel/forward_ips`, `strafe_ips`, `omega_radps` | How fast the robot is going, in its own frame |
 
+Every value the OpMode publishes through `Tracker` goes out too, under the name the flight log gives
+it, so `Tracker.publish("gamepad1/leftStickY", leftStickY)` is `/gamepad1/leftStickY` live and in
+the log. `sim/stick/leftY` is the stick as the gamepad gives it, and `/gamepad1/leftStickY` is what
+the lesson made of it.
+
 The pose is a struct because AdvantageScope wants one. A bare `double[]` of x, y and heading is what
 it calls the legacy numeric array format: it draws that too, warns about it in 2026 and removes it
 in 2027. The flight log has always written `struct:Pose2d`, so the topic now carries the same three
 little-endian doubles, and the schema that says what they are goes out beside it.
 
-The flight log's other struct topics are still missing: no `Speeds`, no `Twist`, no `Path`, no
-`AimPose`. The three `sim/vel` numbers say what `Twist` would have said. That is
-`sim.struct.topics` in `open-work.md`.
-
 ## Which teleop a test drives
 
 The simulator's own tests drive `SimOpModes.Tank` and `SimOpModes.Driven`, which are built only out
-of `base`. That is deliberate: on the lessons branch the lessons are blanks, and a test of the
-simulator that drove one would fail there, where a failure outside the `lessons` package is a defect
-rather than the point.
+of `base`. `SimOpModes.Edges` and `SimOpModes.Slow` are there for running by hand: one prints a
+button and its press edge, the other burns 25 ms in every loop to show a slow OpMode still moves the
+robot at field speed. That is deliberate: on the lessons branch the lessons are blanks, and a test
+of the simulator that drove one would fail there, where a failure outside the `lessons` package is a
+defect rather than the point.
 
 The one test that asks a real lesson to move the robot is
-`LessonsTest.l2_theSticksMoveTheSimulatedRobot`, and it lives in the `lessons` package, where a
-blank L2 failing is expected.
+`LessonsTest.l040_bothSticksForwardDriveTheSimulatedRobotForward`, and it lives in the `lessons`
+package, where it failing until L040 is typed is expected.
 
 ## Where a failing test leaves its log
 
@@ -84,7 +109,7 @@ A test that fails names its flight log in the failure message:
 ```
 drove forward, and got a fair way: 54.75097300967889
 AdvantageScope can open what ran:
-  /var/folders/.../corbelsflightlog-test2706371408438583527/L2bTankOpMode-20260927-032443.wpilog
+  /var/folders/.../corbelsflightlog-test2706371408438583527/L040TankOpMode-20260927-032443.wpilog
 ```
 
 Open that file in AdvantageScope and the run is there up to the moment the assertion went wrong.
@@ -101,7 +126,7 @@ but it never reaches `stop()`, so the file is closed by nobody and holds 0 bytes
 
 ## What the model does, and what it does not
 
-The whole of the physics is three numbers and a lag. Each loop, the four wheel powers are mixed
+The whole of the physics is three numbers and a lag. Each loop, the four wheel speeds are mixed
 back into forward, strafe and turn; each of those chases its commanded speed with a 0.15 s time
 constant; and the result is integrated into a pose.
 
@@ -111,21 +136,33 @@ constant; and the result is integrated into a pose.
 | Strafe | 43.6 in/s |
 | Turn | 4.0 rad/s |
 
+The fake IMU's yaw is how far the simulated robot has turned since it was put down, so a
+localizer's `setPose` does not move it, as on the robot. Each motor's encoder counts what its wheel
+rolls, at `Constants.ticksPerInch`, worked out from the robot's motion with
+`WheelTargets.forMecanum` and `Constants.turnRadiusInches`, and its velocity is the wheel's speed in
+ticks per second. A test that sets the ticks or velocities by hand takes them over.
+
 So the simulator has no slip, no scrub, no battery sag, no floor, no field wall, no motor wired
 backwards and no Pinpoint. It cannot tell you a path is too fast for the tyres, and it will happily
 drive through the perimeter. **When the simulator and the robot disagree, the robot is right.**
 
-The robot starts at Pedro's origin, which is a corner of the field, unless the lesson sets a pose.
-So a lesson that drives forward out of `simRun` starts against the wall and heads up the field.
+An autonomous starts where its own `startPose()` says. A teleop starts where the last autonomous
+finished, which `OpModeStorage.autonomousEndPose` carries between them; with no autonomous before
+it, that is the middle of the near wall facing up the field. A teleop with a start menu, such as
+Example TeleOp, sets its own during INIT. Nothing starts at Pedro's origin any more, which is a
+field corner and outside the perimeter frame.
 
-Time is simulated, not measured: `OpModeHarness.clock` advances `stepMs` every loop and nothing
-reads the wall clock, so the same number of loops integrates the same motion every run. `simRun`
-sleeps `stepMs` between loops as well, which is what makes it look like real time.
+Time is simulated in a test and measured in a run. `OpModeHarness.loop()` advances `step_ms` and
+reads no wall clock, so a test integrates the same motion every time. `simRun` calls `loop(long)`
+with the real milliseconds its last pass took, bounded at 100 ms, so the robot moves at the speed it
+would move on the field however slow the OpMode's own loop is. Everything periodic runs on a 10 ms
+grid measured from the clock read at startup, rather than sleeping a fixed time after each pass.
 
 ## Why the NetworkTables version is not the current one
 
-WPILib publishes `ntcore-java` at 2026.2.2, but every `-jni` artifact stops at 2025.3.2, and a
-server needs the native library. So both halves are pinned to 2025.3.2 in `TeamCode/build.gradle`,
+WPILib publishes `ntcore-java` at 2026.2.2, but every `-jni` artifact stops at 2025.3.2, and
+`SimPublisherTest`'s client, which checks the server against WPILib's own reading of the protocol,
+needs the native library. So both halves are pinned to 2025.3.2 in `TeamCode/build.gradle`,
 and both move together when the 2026 natives appear.
 
 Loading that native out of a plain Maven jar takes some care, and `NtNatives` is where it happens.

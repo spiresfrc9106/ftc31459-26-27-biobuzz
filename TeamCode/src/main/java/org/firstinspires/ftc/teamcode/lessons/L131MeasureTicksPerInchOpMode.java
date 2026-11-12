@@ -1,0 +1,127 @@
+package org.firstinspires.ftc.teamcode.lessons;
+
+import com.pedropathing.ivy.Command;
+import com.pedropathing.ivy.Scheduler;
+import com.pedropathing.ivy.commands.Commands;
+import com.qualcomm.robotcore.eventloop.opmode.Disabled;
+import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
+
+import org.firstinspires.ftc.teamcode.base.Calibration;
+import org.firstinspires.ftc.teamcode.base.CorbelsTeleOp;
+import org.firstinspires.ftc.teamcode.base.Tracker;
+import org.firstinspires.ftc.teamcode.pedro.Constants;
+
+import static org.firstinspires.ftc.teamcode.base.CorbelsDriveTrain.*;
+
+/**
+ * L131: measure how many encoder ticks make an inch -- by pushing the robot.
+ *
+ * <p>L190 needed to know how fast a wheel was turning in inches per second,
+ * and the code was given a number to convert with. This measures it instead.
+ *
+ * <p>The trick is that the robot already knows how far it went: the Pinpoint
+ * measures the floor with its own wheels, and it is already tuned. So push the
+ * robot and compare two accounts of the same journey -- the Pinpoint's, in
+ * inches, and the drive encoders', in ticks. The ratio is the constant.
+ *
+ * <p><b>What to do.</b> Press start. Push the robot slowly straight forward,
+ * at least {@link #needed_in} inches, keeping it pointing the same way.
+ * Read the number off the Driver Station and put it in
+ * {@link Constants#ticksPerInch}.
+ *
+ * <p>Push slowly: a wheel that slips travels without turning, and the
+ * measurement comes out short. Do it three times and see whether you get the
+ * same answer.
+ *
+ * <p>Passes when: LessonsTest.l131_theWheelsRollThroughoutAMeasurementAndBrakeAgainAfterwards
+ * and LessonsTest.l131_stoppingBeforeASingleLoopStillPutsBrakingBack
+ */
+@TeleOp(name = "L131 Measure ticks per inch", group = "Lessons")
+// When on L131S020, see
+// https://coding.stitt.cc/ftc-lessons-java/guide/tasks/l131.html#l131s020
+// for what to do here.
+@Disabled
+// 'public' so the robot can run this OpMode. 'public' allows access from any code.
+public class L131MeasureTicksPerInchOpMode extends CorbelsTeleOp {
+
+    double needed_in = 36.0;
+
+    int[] startTicks;
+    double startX_in, startY_in;
+    double pushed_in, ticks;
+
+    L131TicksDriveTrain drivetrain;
+
+    // 'public' to match the parent class. 'public' allows access from any code.
+    @Override
+    public void init() {
+        initBefore();
+        drivetrain = new L131TicksDriveTrain(hardware);
+        initAfter(drivetrain);
+    }
+
+    // 'public' to match the parent class. 'public' allows access from any code.
+    @Override
+    public void start() {
+        startBefore();
+        // The wheels must roll freely, so no braking while we push.
+        drivetrain.forceCoastForCharacterization();
+        startTicks = drivetrain.wheelTicks();
+        startX_in = follower.pose().x();
+        startY_in = follower.pose().y();
+        Command measureTicksPerInchEveryLoop = Commands.infinite(this::measureTicksPerInch);
+        Scheduler.schedule(measureTicksPerInchEveryLoop);
+        startAfter();
+    }
+
+    // 'public' to match the parent class. 'public' allows access from any code.
+    @Override
+    public void stop() {
+        // Braking is allowed again, however this run ended -- STOP pressed
+        // early, or an exception in the loop. Then hand the wheels back before
+        // the follower's last update, or they keep whatever speed the last loop
+        // commanded.
+        drivetrain.allowConfiguredBrakeMode();
+        drivetrain.stop();
+        stopAfter();
+    }
+
+    // 'public' to match the parent class. 'public' allows access from any code.
+    @Override
+    public void loop() {
+        loopBefore();
+        loopAfter();
+    }
+
+    /** Once every loop, from PLAY until STOP: the scheduler runs it. */
+    void measureTicksPerInch() {
+        drivetrain.setCommandedWheels(0.0, 0.0, 0.0, 0.0);       // no speed: we are pushing
+
+        int[] now = drivetrain.wheelTicks();
+        int frontLeftTicks = now[FL] - startTicks[FL];
+        int frontRightTicks = now[FR] - startTicks[FR];
+        int backLeftTicks = now[BL] - startTicks[BL];
+        int backRightTicks = now[BR] - startTicks[BR];
+        ticks = Calibration.forwardPart(frontLeftTicks, frontRightTicks, backLeftTicks,
+                backRightTicks);
+        double dx_in = follower.pose().x() - startX_in;
+        double dy_in = follower.pose().y() - startY_in;
+        pushed_in = Math.hypot(dx_in, dy_in);
+
+        double measuredTicksPerInch = Calibration.ticksPerInch(ticks, pushed_in);
+        Tracker.publish("measure/pushed_in", pushed_in);
+        Tracker.publish("measure/ticks", ticks);
+        Tracker.publish("measure/measuredTicksPerInch", measuredTicksPerInch);
+
+        Tracker.printToDs("Push the robot forward  %.1f of %.0f inches", pushed_in, needed_in);
+        Tracker.printToDs("Encoders counted  %.0f ticks", ticks);
+        if (pushed_in >= needed_in) {
+            Tracker.printToDs();
+            Tracker.printToDs("ticksPerInch  %.2f", measuredTicksPerInch);
+            Tracker.printToDs("Put that in ticksPerInch in the robot's own file, then run it again to check.");
+        } else {
+            Tracker.printToDs("Currently  %.2f ticks per inch", measuredTicksPerInch);
+        }
+        Tracker.printToDs("Configured now  %.2f", Constants.ticksPerInch);
+    }
+}

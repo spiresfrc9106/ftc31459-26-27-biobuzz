@@ -1,0 +1,42 @@
+package org.firstinspires.ftc.teamcode.lessons;
+
+import org.firstinspires.ftc.teamcode.base.CorbelsMecanum;
+import org.firstinspires.ftc.teamcode.base.RobotHardware;
+
+/**
+ * L190: the drivetrain that asks the wheels for a speed.
+ *
+ * <p>{@link CorbelsMecanum} already mixes, scales and sends wheelSpeeds. This adds
+ * the one door that takes a speed in inches per second and gets it, two ways at
+ * once: a feedforward guess at the volts the speed needs, from L153's kS and
+ * kV, plus a feedback correction from what the encoders measure.
+ *
+ * <p>Passes when: LessonsTest.l190_theSticksCommandASpeedAndTheWheelsAreCorrectedTowardsIt
+ * and LessonsTest.l190_whenTheWheelsAreUpToSpeedOnlyTheFeedforwardRemains
+ */
+class L190SpeedDriveTrain extends CorbelsMecanum {
+
+    L190SpeedDriveTrain(RobotHardware hardware) {
+        super(hardware);
+    }
+
+    /**
+     * Drives each wheel at the speed given, in inches per second.
+     * {@code wanted_ips[FL]} is the front left wheel's speed, and {@code FR},
+     * {@code BL} and {@code BR} name the other three.
+     */
+    // 'public' to match the parent class. 'public' allows access from any code.
+    @Override
+    public void setCommandedWheelSpeeds(double frontLeft_ips, double frontRight_ips,
+                                        double backLeft_ips, double backRight_ips) {
+        double[] wanted_ips = new double[4];
+        wanted_ips[FL] = frontLeft_ips;
+        wanted_ips[FR] = frontRight_ips;
+        wanted_ips[BL] = backLeft_ips;
+        wanted_ips[BR] = backRight_ips;
+
+        // When on L190S060, see
+        // https://coding.stitt.cc/ftc-lessons-java/guide/tasks/l190.html#l190s060
+        // for what to do here.
+    }
+}

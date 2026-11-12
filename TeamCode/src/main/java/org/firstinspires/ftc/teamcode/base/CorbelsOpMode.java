@@ -5,6 +5,8 @@ import com.pedropathing.follower.Follower;
 import com.pedropathing.ivy.Scheduler;
 import com.pedropathing.math.Pose;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
+import org.firstinspires.ftc.teamcode.OpModeStorage;
+import org.firstinspires.ftc.teamcode.pedro.Constants;
 
 
 /**
@@ -26,9 +28,9 @@ import com.qualcomm.robotcore.eventloop.opmode.OpMode;
  *
  * <p>A lesson writes {@code init}, {@code start}, {@code loop} and {@code stop}
  * itself, the way every FTC example does, and calls the hooks below from inside
- * them: {@link #initBefore} and {@link #initAfter}, {@link #startBefore} and
- * {@link #startAfter}, {@link #loopBefore} and {@link #loopAfter}, and
- * {@link #stopAfter}. The hooks are final; what goes between them is the
+ * them: {@link #initBefore} and {@link #initAfter}, {@link #initLoopAfter},
+ * {@link #startBefore} and {@link #startAfter}, {@link #loopBefore} and
+ * {@link #loopAfter}, and {@link #stopAfter}. The hooks are final; what goes between them is the
  * lesson's.
  *
  * <p>{@code init} and {@code loop} are not written here, so the compiler asks
@@ -55,6 +57,8 @@ public abstract class CorbelsOpMode extends OpMode {
 
     // ------------------------------------------------------------ hooks
 
+    protected abstract boolean isAuto();
+
     /** After the hardware and follower exist, before the first update. */
     protected void onInit() {
     }
@@ -68,7 +72,7 @@ public abstract class CorbelsOpMode extends OpMode {
     }
 
     /** Extra localizers to watch. Runs once, when the OpMode starts. */
-    protected void shadowLocalizers() {
+    public void shadowLocalizers() {
     }
 
     // ------------------------------------------------------------ logging
@@ -89,6 +93,22 @@ public abstract class CorbelsOpMode extends OpMode {
         // sensor reading, a configuration problem -- is in the file too. The
         // Robot Controller closes it if the OpMode never runs.
         Tracker.begin(this);
+        // A lesson's run is live in AdvantageScope from INIT, unless the
+        // switch OpMode has turned it off. For practice only: FTC rule R704
+        // forbids it at competitions, so any other OpMode is live only when
+        // the switch has turned it on.
+        if (isLesson()) {
+            Tracker.serveLiveUnlessSwitchedOff();
+        }
+        Tracker.publish("Constants/thisRobot", Constants.thisRobot.name());
+        Tracker.publish("Constants/pickedByRobotControllerName",
+                Constants.pickedByRobotControllerName);
+    }
+
+    /** True for an OpMode in {@code lessons} or in {@code mytry}. */
+    private boolean isLesson() {
+        String name = getClass().getName();
+        return name.contains(".lessons.") || name.contains(".mytry.");
     }
 
     /**
@@ -108,9 +128,34 @@ public abstract class CorbelsOpMode extends OpMode {
     protected final void initAfter(Drivetrain heldDrivetrain) {
         this.heldDrivetrain = heldDrivetrain;
         follower = RobotFactory.follower.apply(hardwareMap, heldDrivetrain);
+        if (!isAuto()) {
+            follower.setPose(OpModeStorage.autonomousEndPose);
+        }
         onInit();
         follower.update();
-        Tracker.printToDs("Panels: http://192.168.43.1:8001");
+        shadowLocalizers = new ShadowLocalizers().publishOnly("pinPoint", follower.localizer);
+        // A lesson has already said where AdvantageScope connects, if it is live.
+        if (!isLesson()) {
+            Tracker.printToDs("Panels: http://192.168.43.1:8001");
+        }
+        Tracker.endInit();
+    }
+
+    /**
+     * Again and again between INIT and PLAY: the live localizer read and its
+     * pose published, so the robot can be watched before it starts. The
+     * wheels are not driven.
+     */
+    @Override
+    public void init_loop() {
+        initLoopAfter();
+    }
+
+    /** The localizer read and published. The last thing a lesson's init_loop() calls. */
+    protected final void initLoopAfter() {
+        follower.localizer.update();
+        shadowLocalizers.update();
+        Tracker.endInitLoop();
     }
 
     @Override
@@ -138,22 +183,16 @@ public abstract class CorbelsOpMode extends OpMode {
         shadowLocalizers.publishOnly("pinPoint", follower.localizer);
     }
 
-    /**
-     * Reads the gamepads. The first thing a lesson's loop() calls, so a button
-     * pressed now is seen by the lesson's own code now.
-     */
+    /** The first thing a lesson's loop() calls. The framework has nothing to do there. */
     protected final void loopBefore() {
-        pollInputs();
     }
 
-    /** Where {@link CorbelsTeleOp} reads its buttons. Nothing for an auto to do. */
-    protected void pollInputs() {
-    }
-
-    /** The follower, the scheduler and the logs. The last thing a lesson's loop() calls. */
+    /** The scheduler, the follower and the logs. The last thing a lesson's loop() calls. */
     protected final void loopAfter() {
-        follower.update();
+        // The commands first, so what they ask of the drivetrain this loop
+        // reaches the wheels in this loop's follower update.
         Scheduler.execute();
+        follower.update();
         shadowLocalizers.update();
         afterLoop();
         // Counts the loop, records Pedro, closes the file's record for this loop,
@@ -170,6 +209,10 @@ public abstract class CorbelsOpMode extends OpMode {
     protected final void stopAfter() {
         follower.manual(0, 0, 0);
         follower.update();
+        if (isAuto()) {
+            OpModeStorage.autonomousEndPose = follower.pose();
+            OpModeStorage.autoHasRun = true;
+        }
         // The drivetrain, not the follower: a lesson that commanded the wheels
         // has them ignoring the follower, so the zero above never reaches a
         // motor. stop() hands them back and writes four zeros.

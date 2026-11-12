@@ -13,25 +13,40 @@ import sys
 from bookpaths import relative, tracked
 from register import PATH, pages
 
-# Generated, and not prose: source/answers/ is what tools/answers.py writes out of
-# the two lesson lines, and source/tasks/cheatsheet.md is what tools/cheatsheet.py
+# Generated, and not prose: source/r950/ is what tools/answers.py writes out of
+# the two lesson lines, and source/tasks/r930.md is what tools/cheatsheet.py
 # reads out of them. A ceiling on a page nobody writes by hand would be a ceiling
 # on how much code a lesson may have, or how many log keys it may publish.
-GENERATED = ("source/answers/", "source/tasks/cheatsheet.md")
+GENERATED = ("source/r950/", "source/tasks/r930.md")
+
+# A lesson's list of what it needs first, and a page's lists of skills and concepts, are written by
+# tools/needs.py between these markers, and are not counted, for the same reason.
+NEEDS_START = ("<!-- needs:", "<!-- skills:")
+NEEDS_END = ("<!-- /needs -->", "<!-- /skills -->")
 
 
 def words(path) -> int:
-    """Words of prose: fenced code and MyST directives do not count."""
+    """Words of prose: fenced code, MyST directives, list markers and a lesson's generated list
+    of needs do not count."""
     total = 0
     in_fence = False
+    in_needs = False
     for line in open(path, encoding="utf-8"):
         stripped = line.strip()
+        if stripped.startswith(NEEDS_START):
+            in_needs = True
+        if in_needs:
+            in_needs = stripped not in NEEDS_END
+            continue
         if stripped.startswith("```") or stripped.startswith(":::"):
             in_fence = not in_fence
             continue
         if in_fence or stripped.startswith(":"):
             continue
-        total += len(stripped.split())
+        tokens = stripped.split()
+        if tokens[:1] == ["-"]:
+            tokens = tokens[1:]
+        total += len(tokens)
     return total
 
 

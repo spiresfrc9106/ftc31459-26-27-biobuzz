@@ -8,16 +8,173 @@ Built with -W: a broken link or a missing image fails the build rather than
 printing a warning nobody reads.
 """
 
-project = "Biobuz lessons"
-author = "Catholic Central Spires Robotics"
-copyright = "2026, Catholic Central Spires Robotics"
+project = "Corbels FTC Programming Lessons in Java"
+author = "Mike Stitt"
+copyright = "2026, Mike Stitt"
 
 extensions = ["myst_parser"]
-myst_enable_extensions = ["colon_fence", "deflist"]
+myst_enable_extensions = ["attrs_block", "colon_fence", "deflist", "substitution"]
+
+
+def made_from() -> dict[str, str]:
+    """B003's three names for what this build was made from, by git describe.
+
+    tools/build.py builds a ref in a throwaway worktree, with the figures filled
+    in, and names its refs in BOOK_LESSONS, BOOK_SOLUTIONS and BOOK_MEDIA; those
+    are described as committed, since a filled-in worktree is always changed.
+    Without them, as under ninja book, the working tree is described, with
+    -dirty for an uncommitted change, and keep.toml's solutions pin; the
+    figures are boxes, so no media is read.
+    """
+    import os
+    import subprocess
+    import tomllib
+    from pathlib import Path
+
+    here = Path(__file__).resolve().parent
+
+    def describe(*args: str, cwd: Path = here) -> str:
+        done = subprocess.run(["git", "describe", "--abbrev=7", *args], cwd=cwd,
+                              capture_output=True, text=True)
+        return done.stdout.strip() or "unknown"
+
+    top = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=here, capture_output=True,
+                         text=True, check=True).stdout.strip()
+    keep = tomllib.loads((Path(top) / "book" / "keep.toml").read_text())
+    lessons = os.environ.get("BOOK_LESSONS")
+    solutions = os.environ.get("BOOK_SOLUTIONS") or (keep["answers"]["solutions_commit"]
+                                                     or keep["answers"]["solutions"])
+    media = os.environ.get("BOOK_MEDIA")
+    tagged = ["--match", "v*", "--exclude", "*-solutions", "--always"]
+    return {
+        "lessons": f"`{describe(*tagged, lessons) if lessons else describe(*tagged, '--dirty')}`",
+        "media": f"`{keep['media']['ref']}`" + (
+            f" at `{describe('--tags', '--always', '--dirty', cwd=Path(media))}`" if media
+            else ", not read, since this build shows the figures as boxes"),
+        "solutions": f"`{describe('--tags', '--always', solutions)}`",
+    }
+
+
+myst_substitutions = made_from()
+
+
+# The tag `mentor` picks the book. With it, the mentor book, rooted at index.md.
+# Without it, the student book, rooted at student_index.md and leaving out the
+# pages only a mentor reads. B003, the welcome, is the first page of both.
+MENTOR_ONLY = ["index.md", "tasks/h096.md", "tasks/h097.md"]
 
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
+if tags.has("mentor"):  # noqa: F821, Sphinx puts `tags` in this file's namespace
+    exclude_patterns.append("student_index.md")
+else:
+    root_doc = "student_index"
+    exclude_patterns += MENTOR_ONLY
 
 html_theme = "furo"
-html_title = "Biobuz lessons"
+html_title = "Corbels FTC Programming Lessons in Java"
 html_static_path = ["_static"]
-html_css_files = ["pencil.css"]
+html_css_files = ["pencil.css", "steps.css", "diff.css", "labels.css"]
+
+
+def setup(app):
+    """Drop the other book's `only` blocks before links are resolved, give the
+    student book an index.html, and give each lesson step a short anchor.
+
+    Sphinx drops them at priority 50 and resolves links at 9 and 10, so a link
+    to a mentor page inside `{only} mentor` would fail the student build. A
+    link to one outside `only` still fails it.
+    """
+    from sphinx.transforms.post_transforms import SphinxPostTransform
+    from sphinx.util.nodes import process_only_nodes
+
+    class OnlyBeforeLinks(SphinxPostTransform):
+        default_priority = 5
+
+        def run(self, **kwargs):
+            process_only_nodes(self.document, self.env._tags)
+
+    app.add_post_transform(OnlyBeforeLinks)
+
+    def front_page_as_index(app, exception):
+        """Give the student book an index.html, so its folder's URL opens it."""
+        if exception is None and app.builder.format == "html" and app.config.root_doc != "index":
+            import shutil
+            from pathlib import Path
+
+            out = Path(app.outdir)
+            shutil.copyfile(out / f"{app.config.root_doc}.html", out / "index.html")
+
+    app.connect("build-finished", front_page_as_index)
+
+    def step_anchors(app, doctree):
+        """Give a step `### L020S010: read the left stick` the id `l020s010`, so
+        the code a student copies can link to it. A how-to's step, `H011S010`,
+        gets one the same way."""
+        import re
+
+        from docutils import nodes
+
+        for section in doctree.findall(nodes.section):
+            step = re.match(r"[LH]\d{3}S\d{3}\b", section[0].astext())
+            if step and step.group().lower() not in section["ids"]:
+                section["ids"].insert(0, step.group().lower())
+
+    app.connect("doctree-read", step_anchors)
+
+    import re
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    top = Path(subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=app.confdir,
+                              capture_output=True, text=True, check=True).stdout.strip())
+    sys.path.insert(0, str(top / "book" / "tools"))
+    from check_figures import descriptions
+
+    shows = descriptions(top / "book")
+
+    def describe_pencilled(app, docname, source):
+        """Put each pencilled box's row from FIGURES.md, what the figure must show, under its
+        own words, so the description has one home. tools/check_figures.py finds a box with
+        no row."""
+        def box(m):
+            what = shows.get(m.group(1))
+            return f"{m.group(0)[:-4]}\n\n{what}\n:::" if what else m.group(0)
+
+        source[0] = re.sub(r"^:::\{admonition\} (fig-[\w-]+)\n:class: pencil\n.*?\n:::$", box,
+                           source[0], flags=re.M | re.S)
+
+    app.connect("source-read", describe_pencilled)
+
+    def video(name, rawtext, text, lineno, inliner, options=None, content=None):
+        """{video}`l020`: a link to l020.mp4 in this version's media/, by its hashed name.
+
+        The name is l020_HASH.mp4, where HASH is the first 12 hex digits of the video's
+        SHA-256, as tools/build.py names the figures. BOOK_MEDIA, set by tools/build.py, is a
+        corbels-lfs-lessons checkout; the SHA-256 is read from its videos/l020.mp4, or from the
+        LFS pointer there when the video is not pulled. Without it, as under ninja book, the
+        link is to l020.mp4 with no hash. The link is relative, so each version plays its own
+        copy, and the text is the address every version's copy is served from.
+        """
+        import hashlib
+        import os
+        import re
+
+        from docutils import nodes
+
+        mp4 = f"{text}.mp4"
+        media = os.environ.get("BOOK_MEDIA")
+        if media:
+            path = Path(media) / "videos" / mp4
+            head = path.read_bytes()[:200]
+            pointer = re.search(rb"^oid sha256:([0-9a-f]{64})$", head, re.M) \
+                if head.startswith(b"version https://git-lfs") else None
+            sha256 = pointer[1].decode() if pointer else \
+                hashlib.sha256(path.read_bytes()).hexdigest()
+            mp4 = f"{text}_{sha256[:12]}.mp4"
+        env = inliner.document.settings.env
+        uri = "../" * (env.docname.count("/") + 1) + f"media/{mp4}"
+        shown = f"https://coding.stitt.cc/ftc-lessons-java/media/{mp4}"
+        return [nodes.reference(rawtext, shown, refuri=uri)], []
+
+    app.add_role("video", video)

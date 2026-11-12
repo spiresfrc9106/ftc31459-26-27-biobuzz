@@ -1,0 +1,214 @@
+# Publishes the books on coding.stitt.cc, and makes a release.
+#
+# Lesson work merges into dev. A release line is dev, main or a branch
+# release-X.Y; RELEASING.md says how a release is made from each.
+#
+# - A push to dev: the books built from it and from the solutions and media its
+#   book/keep.toml pins, at /ftc-lessons-java/ver/dev/.
+# - A tag such as v0.1.4-rc.1, on a release line: the same, as a pre-release,
+#   at /ftc-lessons-java/ver/<tag>/, and a GitHub pre-release.
+# - A tag vX.Y.Z, at the head of main or of release-X.Y: the same, as a
+#   release, and a GitHub Release, which is GitHub's Latest unless a higher
+#   vX.Y.Z exists.
+# - A push to main publishes nothing. A run by hand builds, keeps the books as
+#   an artifact, and publishes nothing.
+#
+# A tag's GitHub Release carries the web pages with their media as a zip, and
+# its media commit is tagged in corbels-lfs-lessons with the same name, with the
+# deploy key in the secret CORBELS_LFS_DEPLOY_KEY.
+#
+# The branch site holds every version's pages, without media; each publish
+# commits its version there with cloudflare/assemble.py, which uploads to R2
+# each figure and video R2 does not hold, and deploys the branch to the Pages
+# project coding-stitt-cc, with the token in the secret CLOUDFLARE_API_TOKEN.
+# The figures and videos come from corbels-lfs-lessons at the commit
+# book/keep.toml's [media] pins. Every LFS download counts against the owner's
+# monthly LFS bandwidth, so only figures/ is pulled, cached by media commit, and
+# a video is pulled only when coding.stitt.cc serves no copy of it.
+name: Release
+
+on:
+  push:
+    tags: ['v*', '!v*-solutions']
+    branches: [dev]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Every run that publishes pushes to the branch site and deploys it. Do not
+# cancel one in progress: each publishes its own version.
+concurrency:
+  group: coding-stitt-cc
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # The solutions branch and site are read by name. The checkout makes the tag
+      # that started the run a lightweight tag, which git describe skips and whose
+      # message is the commit's, so every tag is fetched again as it was made.
+      - name: Every branch as a local branch, and every tag as made
+        run: |
+          git fetch --update-head-ok origin '+refs/heads/*:refs/heads/*'
+          git fetch --force origin '+refs/tags/*:refs/tags/*'
+
+      # tools/release.py says what is published, or why not; its opening comment
+      # gives the rules, and tools/test_release.py tries each.
+      - name: What this run publishes, and from which solutions
+        id: what
+        run: |
+          python3 tools/test_release.py
+          python3 tools/release.py "$GITHUB_REF_TYPE" "$GITHUB_REF_NAME" > "$RUNNER_TEMP/what.txt"
+          cat "$RUNNER_TEMP/what.txt" >> "$GITHUB_OUTPUT"
+          . "$RUNNER_TEMP/what.txt"
+          echo "Publishing '${version:-nothing}', with the solutions at $solutions."
+
+      - name: The figures' repository, without its LFS files
+        uses: actions/checkout@v4
+        with:
+          repository: msb-stitt/corbels-lfs-lessons
+          ref: ${{ steps.what.outputs.media }}
+          path: media
+          lfs: false
+
+      - name: Which media commit
+        id: media
+        run: |
+          # The checkout leaves LFS's filters and push hook out.
+          git -C media lfs install --local
+          echo "commit=$(git -C media rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: The media's LFS objects, from the cache
+        uses: actions/cache@v4
+        with:
+          path: media/.git/lfs/objects
+          key: lfs-figures-${{ steps.media.outputs.commit }}
+          restore-keys: lfs-figures-
+
+      - name: The figures, and nothing else, from LFS
+        run: git -C media lfs pull --include 'figures/'
+
+      - name: The videos, from coding.stitt.cc where it has them, or else from LFS
+        run: python3 cloudflare/videos.py --media media
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Point the build at the runner's Android SDK
+        run: echo "sdk.dir=${ANDROID_SDK_ROOT}" > local.properties
+
+      - name: Tests
+        run: ./gradlew --no-daemon :TeamCode:test
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ninja -r book/requirements.txt
+
+      - name: The guide's checks
+        working-directory: book
+        env:
+          PYTHONPATH: tools
+        run: |
+          ninja check-sphinx check-wrap check-reading check-keep check-words check-figures check-needs
+          python tools/answers.py --check
+          python tools/cheatsheet.py --check
+
+      # Builds the review too, which checks that each lesson's changes rebuild its patch.
+      - name: Both books and the review
+        working-directory: book
+        run: python tools/run.py publish_check --media ../media --solutions '${{ steps.what.outputs.solutions }}'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: publish
+          path: book/build/publish
+
+      - uses: actions/setup-node@v4
+        if: steps.what.outputs.kind != ''
+        with:
+          node-version: '26'
+          cache: npm
+          cache-dependency-path: cloudflare/package-lock.json
+
+      - name: The version on the branch site, its media in R2, and the site deployed
+        if: steps.what.outputs.kind != ''
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          VERSION: ${{ steps.what.outputs.version }}
+        run: |
+          (cd cloudflare && npm ci --no-audit --no-fund)
+          if git rev-parse --verify --quiet refs/heads/site >/dev/null; then
+            git worktree add cloudflare/site site
+          else
+            git worktree add --orphan -b site cloudflare/site
+          fi
+          python3 cloudflare/assemble.py --site cloudflare/site --built book/build/publish \
+            --version "$VERSION" --commit "$GITHUB_SHA"
+          python3 cloudflare/media_index.py --site cloudflare/site
+          # Committed first and pushed last, so a failed deploy pushes nothing. A run
+          # again of the same commit changes nothing, and commits nothing.
+          git -C cloudflare/site add -A
+          git -C cloudflare/site diff --cached --quiet ||
+            git -C cloudflare/site -c user.name="Mike S.B. Stitt" -c user.email=msb@stitt.cc \
+              commit -q -m "$VERSION, built from $(git rev-parse --short "$GITHUB_SHA") by the release workflow."
+          (cd cloudflare && ./wrangler.sh pages deploy --branch main --commit-hash "$GITHUB_SHA" --commit-dirty=true)
+          git -C cloudflare/site push origin site
+
+      - name: What coding.stitt.cc holds
+        if: steps.what.outputs.kind != ''
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: python3 cloudflare/usage.py --site cloudflare/site
+
+      - name: The media commit tagged in corbels-lfs-lessons
+        if: github.ref_type == 'tag'
+        env:
+          KEY: ${{ secrets.CORBELS_LFS_DEPLOY_KEY }}
+          VERSION: ${{ steps.what.outputs.version }}
+        run: |
+          mkdir -p ~/.ssh && printf '%s\n' "$KEY" > ~/.ssh/corbels && chmod 600 ~/.ssh/corbels
+          ssh-keyscan github.com 2>/dev/null >> ~/.ssh/known_hosts
+          git -C media remote add archive git@github.com:msb-stitt/corbels-lfs-lessons.git
+          git -C media config core.sshCommand 'ssh -i ~/.ssh/corbels -o IdentitiesOnly=yes'
+          git -C media tag "$VERSION" HEAD
+          git -C media push archive "refs/tags/$VERSION"
+
+      - name: A GitHub Release with the web pages
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.what.outputs.version }}
+          LATEST: ${{ steps.what.outputs.latest }}
+          SOLUTIONS: ${{ steps.what.outputs.solutions }}
+        run: |
+          # The pages link their figures and videos in media/, beside them.
+          zipped="$PWD/book/build/ftc31459-$VERSION-web.zip"
+          (cd book/build/publish && zip -qr "$zipped" guide mentor review media)
+          {
+            git tag -l --format='%(contents)' "$VERSION"
+            echo
+            echo "This release is at https://coding.stitt.cc/ftc-lessons-java/ver/$VERSION/guide/, and more versions are listed at https://coding.stitt.cc/ftc-lessons-java/versions.html."
+            echo "This release's web pages are in \`ftc31459-$VERSION-web.zip\`: unzip it and open \`guide/index.html\`."
+            echo
+            echo "The answer pages and cheat sheet are built from the solutions at the tag \`$SOLUTIONS\`."
+          } > notes.md
+          case "$VERSION" in
+            *-*) pre=--prerelease ;;
+            *)   pre=--latest=$LATEST ;;
+          esac
+          gh release create "$VERSION" "$zipped" \
+            --title "$VERSION" $pre --notes-file notes.md

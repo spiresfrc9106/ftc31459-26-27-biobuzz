@@ -6,7 +6,11 @@ import static org.junit.Assert.assertTrue;
 
 import com.pedropathing.math.Pose;
 
+import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
+import org.firstinspires.ftc.teamcode.OpModeStorage;
 import org.firstinspires.ftc.teamcode.pedro.Constants;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 
@@ -27,12 +31,48 @@ public class SimMotionTest {
     @Rule
     public final SimLogs logs = new SimLogs();
 
-    private static double[] motorPowers(OpModeHarness h) {
+    /**
+     * A teleop starts where the last OpMode stopped, and {@code stopAfter()}
+     * writes that back, so a test that runs one to the end changes where the
+     * next test's robot stands. Saved and restored so these stay independent.
+     */
+    private Pose savedStart;
+
+    @Before
+    public void saveStart() {
+        savedStart = OpModeStorage.autonomousEndPose;
+    }
+
+    @After
+    public void restoreStart() {
+        OpModeStorage.autonomousEndPose = savedStart;
+    }
+
+    /** Where a teleop is put down, which is what these measure movement from. */
+    private static Pose start() {
+        return OpModeStorage.autonomousEndPose;
+    }
+
+    /** How far the robot went along the way it was facing when it started. */
+    private static double forwardOf(Pose now) {
+        Pose s = start();
+        return (now.x() - s.x()) * Math.cos(s.heading())
+                + (now.y() - s.y()) * Math.sin(s.heading());
+    }
+
+    /** How far it slid across that line, which for a tank drive is nothing. */
+    private static double lateralOf(Pose now) {
+        Pose s = start();
+        return -(now.x() - s.x()) * Math.sin(s.heading())
+                + (now.y() - s.y()) * Math.cos(s.heading());
+    }
+
+    private static double[] motorSpeeds(OpModeHarness h) {
         return new double[]{
-                h.motors.get(OpModeHarness.FRONT_LEFT).power,
-                h.motors.get(OpModeHarness.FRONT_RIGHT).power,
-                h.motors.get(OpModeHarness.BACK_LEFT).power,
-                h.motors.get(OpModeHarness.BACK_RIGHT).power};
+                h.motors.get(OpModeHarness.FRONT_LEFT).speed,
+                h.motors.get(OpModeHarness.FRONT_RIGHT).speed,
+                h.motors.get(OpModeHarness.BACK_LEFT).speed,
+                h.motors.get(OpModeHarness.BACK_RIGHT).speed};
     }
 
     /** Both sticks pushed fully forward, for one simulated second. */
@@ -47,7 +87,7 @@ public class SimMotionTest {
     }
 
     /**
-     * Without the motor powers driving the simulation, this fails with
+     * Without the motor speeds driving the simulation, this fails with
      * {@code drove forward, and got a fair way: 0.0}. With one sign wrong in
      * the strafe row of {@link SimRobot#fromWheels}, it fails with
      * {@code no sideways drift expected:<0.0> but was:<18.53...>}.
@@ -55,13 +95,98 @@ public class SimMotionTest {
     @Test
     public void theSticksMoveTheSimulatedRobot() {
         OpModeHarness h = driveForward();
-        assertArrayEquals("all four wheels at full power",
-                new double[]{1, 1, 1, 1}, motorPowers(h), 1e-9);
+        assertArrayEquals("all four wheels at full speed",
+                new double[]{1, 1, 1, 1}, motorSpeeds(h), 1e-9);
 
         Pose pose = h.robot.localizer.state().pose();
-        assertTrue("drove forward, and got a fair way: " + pose.x(), pose.x() > 40);
-        assertEquals("no sideways drift", 0, pose.y(), 1e-9);
-        assertEquals("no turn", 0, pose.heading(), 1e-9);
+        assertTrue("drove forward, and got a fair way: " + forwardOf(pose), forwardOf(pose) > 40);
+        assertEquals("no sideways drift", 0, lateralOf(pose), 1e-9);
+        assertEquals("no turn", start().heading(), pose.heading(), 1e-9);
+        h.stop();
+    }
+
+    /** The IMU's yaw, in radians, as {@code HardwareWheelSource} reads it. */
+    private static double imuYaw(OpModeHarness h) {
+        return h.imu.imu.getRobotYawPitchRollAngles().getYaw(AngleUnit.RADIANS);
+    }
+
+    /**
+     * The IMU turns with the simulated robot, from zero where the robot was
+     * put down. With the harness not calling {@code follow}, this fails with
+     * {@code the IMU turned as far as the robot expected:<2.88...> but was:<0.0>};
+     * following the pose instead of the turning, with
+     * {@code put down at its start, the IMU reads zero expected:<0.0> but was:<1.57...>}.
+     */
+    @Test
+    public void theImuTurnsWithTheSimulatedRobot() {
+        OpModeHarness h = new OpModeHarness(new SimOpModes.Tank());
+        h.init();
+        h.start();
+        assertEquals("put down at its start, the IMU reads zero", 0, imuYaw(h), 1e-9);
+
+        h.gamepad1.left_stick_y = -1.0f;    // left forward, right back: clockwise
+        h.gamepad1.right_stick_y = 1.0f;
+        h.loops(100, 0);
+        double turned = h.robot.localizer.state().pose().heading() - start().heading();
+        double wrapped = Math.atan2(Math.sin(turned), Math.cos(turned));
+        assertTrue("it turned a fair way: " + turned, Math.abs(turned) > 1);
+        assertEquals("the IMU turned as far as the robot", wrapped, imuYaw(h), 1e-9);
+
+        h.imu.imu.resetYaw();
+        assertEquals("resetYaw makes here zero", 0, imuYaw(h), 1e-9);
+        h.stop();
+    }
+
+    /** Each encoder's count, front left, front right, back left, back right. */
+    private static double[] encoders(OpModeHarness h) {
+        return new double[]{
+                h.motors.get(OpModeHarness.FRONT_LEFT).motor.getCurrentPosition(),
+                h.motors.get(OpModeHarness.FRONT_RIGHT).motor.getCurrentPosition(),
+                h.motors.get(OpModeHarness.BACK_LEFT).motor.getCurrentPosition(),
+                h.motors.get(OpModeHarness.BACK_RIGHT).motor.getCurrentPosition()};
+    }
+
+    /**
+     * Driving forward turns every encoder by the inches covered, at
+     * {@code Constants.ticksPerInch}, and reports the speed it is turning at.
+     * With the harness not calling {@code follow}, this fails with
+     * {@code every wheel rolled as far as the robot went: arrays first differed
+     * at element [0]; expected:<2463.7...> but was:<0.0>}, and the spin test
+     * with {@code the left wheels roll forward: 0.0}.
+     */
+    @Test
+    public void theEncodersCountWhatTheWheelsRoll() {
+        OpModeHarness h = driveForward();
+        double ticks = forwardOf(h.robot.localizer.state().pose()) * Constants.ticksPerInch;
+        assertArrayEquals("every wheel rolled as far as the robot went",
+                new double[]{ticks, ticks, ticks, ticks}, encoders(h), 1);
+        assertTrue("and is still turning: " + h.motors.get(OpModeHarness.FRONT_LEFT).motor.getVelocity(),
+                h.motors.get(OpModeHarness.FRONT_LEFT).motor.getVelocity() > 1000);
+        h.stop();
+    }
+
+    /**
+     * Spinning clockwise rolls the left wheels forward and the right ones
+     * back, each by the turn times {@code Constants.turnRadiusInches}. With
+     * the turn's sign flipped in the wheels, this fails with {@code the left
+     * wheels roll forward}.
+     */
+    @Test
+    public void spinningRollsTheTwoSidesOppositeWays() {
+        OpModeHarness h = new OpModeHarness(new SimOpModes.Tank());
+        h.init();
+        h.start();
+        assertArrayEquals("nothing counted when it was put down",
+                new double[]{0, 0, 0, 0}, encoders(h), 0);
+        h.gamepad1.left_stick_y = -1.0f;    // left forward, right back: clockwise
+        h.gamepad1.right_stick_y = 1.0f;
+        h.loops(50, 0);
+        double turned = h.robot.localizer.turnedRadians();
+        double edge = -turned * Constants.turnRadiusInches * Constants.ticksPerInch;
+        double[] e = encoders(h);
+        assertTrue("the left wheels roll forward: " + e[0], e[0] > 0);
+        assertArrayEquals("each wheel rolled the turn times the radius",
+                new double[]{edge, -edge, edge, -edge}, e, 1);
         h.stop();
     }
 
@@ -99,8 +224,8 @@ public class SimMotionTest {
      */
     @Test
     public void aSlowPassCoversTheGroundItsTimeIsWorth() {
-        double quick = driveForward().robot.localizer.state().pose().x();
-        double slow = driveForwardInSlowPasses().robot.localizer.state().pose().x();
+        double quick = forwardOf(driveForward().robot.localizer.state().pose());
+        double slow = forwardOf(driveForwardInSlowPasses().robot.localizer.state().pose());
         assertEquals("the same second covers the same ground", quick, slow, 0.01);
     }
 
@@ -112,7 +237,7 @@ public class SimMotionTest {
      * take hold; and by the fortieth a step covers 1.608686 in, which is 25 ms of
      * 64.4 in/s less what is left of the lag.
      *
-     * <p>With {@code loop(long)} advancing {@code stepMs} instead of what it was
+     * <p>With {@code loop(long)} advancing {@code step_ms} instead of what it was
      * given, the fortieth step covers 0.6003162255933034 in rather than
      * 1.608686 in, and this fails on the stride. That is not a settled step
      * either: forty steps of 10 ms is 400 ms, and the lag has not finished
@@ -127,12 +252,12 @@ public class SimMotionTest {
         h.gamepad1.right_stick_y = -1.0f;
 
         double[] each = new double[40];
-        double last = h.robot.localizer.state().pose().x();
+        double last = forwardOf(h.robot.localizer.state().pose());
         for (int i = 0; i < each.length; i++) {
             h.loop(25);
-            double x = h.robot.localizer.state().pose().x();
-            each[i] = x - last;
-            last = x;
+            double gone = forwardOf(h.robot.localizer.state().pose());
+            each[i] = gone - last;
+            last = gone;
         }
 
         assertEquals("the first step has no interval behind it", 0, each[0], 0);
@@ -143,7 +268,7 @@ public class SimMotionTest {
     }
 
     /**
-     * Without {@code SimDrive.delegate}, this fails with all four powers at
+     * Without {@code SimDrive.delegate}, this fails with all four speeds at
      * {@code 0.0}, and takes L9 and L10 with it: their paths end where they
      * started, {@code expected:<96.0> but was:<72.0>}.
      */
@@ -154,8 +279,8 @@ public class SimMotionTest {
         h.start();
         h.robot.follower.manual(1, 0, 0);
         h.loop();
-        assertArrayEquals("the follower's forward became four wheel powers",
-                new double[]{1, 1, 1, 1}, motorPowers(h), 1e-9);
+        assertArrayEquals("the follower's forward became four wheel speeds",
+                new double[]{1, 1, 1, 1}, motorSpeeds(h), 1e-9);
         h.stop();
     }
 }

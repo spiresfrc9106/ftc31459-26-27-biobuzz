@@ -1,6 +1,7 @@
 package org.firstinspires.ftc.teamcode.logcheck;
 
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
+import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
 import io.github.mikestitt.corbelsflightlog.FlightLog;
@@ -15,7 +16,8 @@ import java.io.File;
  * whether it can be written to, how much space is left, what is already there,
  * and the address of the download page.
  */
-@TeleOp(name = "Log 6: where are the logs?", group = "LogCheck")
+@Disabled
+@TeleOp(name = "Log 6: where are the logs?", group = "4 LogCheck")
 public class LogCheck6WhereOpMode extends LinearOpMode {
 
     @Override

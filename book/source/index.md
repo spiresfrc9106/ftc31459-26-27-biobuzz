@@ -1,108 +1,110 @@
-# Biobuz lessons
-
-This guide walks you through making the robot do things, one task at a time. Each task page says
-what you will have when it is done, what has to be true before you start, and the steps to get
-there. Every step tells you what you will see when it worked and what to try when it did not.
-
-## How to use it
-
-- **Start with the task you need, not with page one.** Every task lists what it needs finished
-  first. If you missed a session, find the task you are up to and read its *Before you start*.
-- **Do the step, then read the check.** The check tells you whether to go on. If what you see is not
-  what the check describes, the *if it didn't* line under it is the first thing to try.
-- **The answers are in the back.** They are the real code from the solutions branch. Use them when
-  you are stuck, not instead of being stuck.
-
-:::{admonition} fig-robot-front
-:class: pencil
-The robot from the front, on the floor, with both gamepads beside it, so a student can match what is
-in front of them to what the guide calls each part.
-:::
-
-## The tasks
+# Corbels FTC Programming Lessons in Java
 
 ```{toctree}
 :maxdepth: 1
-:caption: Get the robot moving
+:caption: welcome
 
-tasks/directions
-```
-
-Getting the robot and the laptop ready has no page yet. Checking the motor directions needs L2
-finished, so read it after that one.
-
-```{toctree}
-:maxdepth: 1
-:caption: Drive it with the sticks
-
-tasks/l2
-tasks/l3
-tasks/l4
-tasks/l5
+tasks/b003
 ```
 
 ```{toctree}
 :maxdepth: 1
-:caption: See what it is doing
+:caption: get started
 
-tasks/panels
-tasks/bench
+tasks/b010
+tasks/h011
+tasks/h012
+tasks/h013
+tasks/h017
 ```
 
 ```{toctree}
 :maxdepth: 1
-:caption: Hand the wheels to the follower
+:caption: drive it with the sticks
 
-tasks/l6
+tasks/l020
+tasks/e021
+tasks/l030
+tasks/e035
+tasks/l040
+tasks/e041
+tasks/l045
+tasks/l050
+tasks/l060
+tasks/l065
+tasks/e067
+tasks/l070
+tasks/l080
+tasks/l090
+tasks/l093
+tasks/l095
 ```
 
 ```{toctree}
 :maxdepth: 1
-:caption: Know where it is
+:caption: see what it is doing
 
-tasks/pinpoint
-tasks/l8
+tasks/h096
+tasks/h097
 ```
 
 ```{toctree}
 :maxdepth: 1
-:caption: Drive it without a driver
+:caption: connect the drivetrain to the follower
 
-tasks/l9
-tasks/l10
+tasks/l110
+tasks/e111
 ```
 
 ```{toctree}
 :maxdepth: 1
-:caption: Drive it like a driver
+:caption: know where it is
 
-tasks/l11
-tasks/l12
-tasks/l13
-tasks/l14
-tasks/l15
-tasks/l16
+tasks/l113
+tasks/l115
+tasks/l117
+tasks/l120
 ```
 
 ```{toctree}
 :maxdepth: 1
-:caption: Measure the robot
+:caption: drive it without a driver
 
-tasks/l17
+tasks/l125
+tasks/l130
+tasks/l131
+tasks/l132
+tasks/l135
 ```
 
 ```{toctree}
 :maxdepth: 1
-:caption: The back of the book
+:caption: drive it like a driver
 
-tasks/glossary
-tasks/cheatsheet
-tasks/sources
+tasks/l140
+tasks/e141
+tasks/e142
+tasks/e143
+tasks/l150
+tasks/l153
+tasks/e154
+tasks/l157
+tasks/l160
+tasks/l170
+tasks/l180
+tasks/l190
 ```
 
 ```{toctree}
 :maxdepth: 1
-:caption: The answers
+:caption: the back of the book
 
-answers/index
+tasks/r900
+tasks/r910
+tasks/r915
+tasks/r920
+tasks/r930
+r950/index
+tasks/b980
+tasks/b990
 ```

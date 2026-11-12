@@ -6,7 +6,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import org.firstinspires.ftc.teamcode.lessons.L15CombinedOpMode;
+import org.firstinspires.ftc.teamcode.lessons.L180CombinedOpMode;
 import org.firstinspires.ftc.teamcode.pedro.Constants;
 import org.junit.Test;
 
@@ -28,7 +28,7 @@ public class HardwareRulesTest {
 
     @Test
     public void everyDeviceIsLookedUpDuringInitAndNotAfter() {
-        OpModeHarness h = new OpModeHarness(new L15CombinedOpMode());
+        OpModeHarness h = new OpModeHarness(new L180CombinedOpMode());
         assertEquals("nothing before init", 0, h.lookups);
 
         h.init();
@@ -47,7 +47,7 @@ public class HardwareRulesTest {
 
     @Test
     public void theHardwareIsResolvedExactlyOnce() {
-        OpModeHarness h = new OpModeHarness(new L15CombinedOpMode());
+        OpModeHarness h = new OpModeHarness(new L180CombinedOpMode());
         h.init();
         h.start();
         h.loops(5, 0);
@@ -56,9 +56,9 @@ public class HardwareRulesTest {
 
     @Test
     public void theLocalizerReadsTheDevicesTheOpModeWasGiven() {
-        OpModeHarness h = new OpModeHarness(new L15CombinedOpMode());
+        OpModeHarness h = new OpModeHarness(new L180CombinedOpMode());
         h.init();
-        L15CombinedOpMode opMode = (L15CombinedOpMode) h.opMode();
+        L180CombinedOpMode opMode = (L180CombinedOpMode) h.opMode();
         assertSame("the same motor object, not a second handle",
                 h.motors.get(OpModeHarness.FRONT_LEFT).motor, opMode.hardware.frontLeft);
         assertSame(h.motors.get(OpModeHarness.FRONT_RIGHT).motor, opMode.hardware.frontRight);
@@ -73,13 +73,18 @@ public class HardwareRulesTest {
         assertNotNull("could not find the sources to scan", baseDirectory);
 
         String[] names = {OpModeHarness.FRONT_LEFT, OpModeHarness.FRONT_RIGHT,
-                OpModeHarness.BACK_LEFT, OpModeHarness.BACK_RIGHT, Constants.imuName};
+                OpModeHarness.BACK_LEFT, OpModeHarness.BACK_RIGHT, Constants.imuName,
+                Constants.intakeName, Constants.leftIntakeServoName,
+                Constants.rightIntakeServoName, Constants.launcherName,
+                Constants.windmillServoName};
         List<String> offenders = new ArrayList<>();
         try (Stream<Path> files = Files.walk(baseDirectory)) {
             for (Path file : files.filter(f -> f.toString().endsWith(".java"))
                     .collect(Collectors.toList())) {
                 String name = file.getFileName().toString();
                 if (name.equals("Constants.java")) continue;
+                // Each robot's own file holds the configs AutoTune prints, names and all.
+                if (name.matches("Bot[0-9]+\\.java")) continue;
                 if (file.toString().contains("procedures")) continue;   // tuners ask the driver
                 String code = withoutComments(new String(Files.readAllBytes(file), "UTF-8"));
                 for (String device : names) {

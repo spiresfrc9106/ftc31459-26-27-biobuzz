@@ -38,10 +38,7 @@ public class FlightLogTest {
         @Override public void init() { initBefore(); initAfter(); }
         @Override public void loop() { loopBefore(); loopAfter(); }
 
-        @Override protected Pose startPose() { return POSES.of(12, 12, 0); }
-        @Override protected com.pedropathing.ivy.Command routine() {
-            return com.pedropathing.ivy.commands.Commands.instant(() -> { });
-        }
+        @Override public Pose startPose() { return POSES.of(12, 12, 0); }
     }
 
     @Test
@@ -90,6 +87,18 @@ public class FlightLogTest {
         // And the file, which by now is closed and readable.
         File file = h.logs()[0];
         assertTrue("the file has content", file.length() > 200);
+    }
+
+    @Test
+    public void theLogSaysWhichRobotThisRobotPicked() {
+        OpModeHarness h = new OpModeHarness(new SampleTeleOp());
+        h.init();
+        assertEquals("from INIT, so a run that never starts still says",
+                "BOT_37523", Tracker.values().get("Constants/thisRobot"));
+        assertEquals("the tests have no Robot Controller name",
+                false, Tracker.values().get("Constants/pickedByRobotControllerName"));
+        h.start();
+        h.stop();
     }
 
     @Test

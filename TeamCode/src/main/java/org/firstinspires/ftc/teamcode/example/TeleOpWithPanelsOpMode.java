@@ -14,12 +14,12 @@ import org.firstinspires.ftc.teamcode.base.CorbelsTeleOp;
  * log -- comes from {@link CorbelsTeleOp}.
  *
  * <p>Cubing a stick leaves the sign alone and makes small pushes gentler, which
- * is the whole reason to do it. L3 covers the idea properly.
+ * is the whole reason to do it. L060 covers the idea properly.
  *
  * <p>While this runs, open http://192.168.43.1:8001 on a device joined to the
  * robot's Wi-Fi. Loop rate, pose and velocity all plot live.
  */
-@TeleOp(name = "TeleOp + Panels", group = "Corbels")
+@TeleOp(name = "TeleOp + Panels", group = "3 Old")
 public class TeleOpWithPanelsOpMode extends CorbelsTeleOp {
 
     private CorbelsMecanum drivetrain;
@@ -35,10 +35,10 @@ public class TeleOpWithPanelsOpMode extends CorbelsTeleOp {
     public void loop() {
         loopBefore();
 
-        double forwardSpeed = cubed(-gamepad1.left_stick_y);
-        double strafeLeftSpeed = cubed(-gamepad1.left_stick_x);
+        double forwardXSpeed = cubed(-gamepad1.left_stick_y);
+        double strafeYSpeed = cubed(-gamepad1.left_stick_x);
         double turnCcwSpeed = cubed(-gamepad1.right_stick_x);
-        drivetrain.sticks(forwardSpeed, strafeLeftSpeed, turnCcwSpeed);
+        drivetrain.sticks(forwardXSpeed, strafeYSpeed, turnCcwSpeed);
 
         loopAfter();
     }

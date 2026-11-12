@@ -6,6 +6,7 @@ import static com.pedropathing.ivy.pedro.PedroCommands.follow;
 
 import com.pedropathing.api.PoseFactory;
 import com.pedropathing.ivy.Command;
+import com.pedropathing.ivy.Scheduler;
 import com.pedropathing.math.Pose;
 import com.pedropathing.paths.Path;
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
@@ -23,20 +24,22 @@ import org.firstinspires.ftc.teamcode.base.Tracker;
  * "24 inches in whatever direction the robot is pointing at start".
  *
  * <p>NOTE ON HEADING: this uses {@code .constant()}, not the {@code .linear()}
- * the Pedro docs show. Open issues #176 and #181 both report .linear()
- * interpolating heading BACKWARDS on line paths in Pedro 3.0.x. Since this path
- * does not change heading at all, constant interpolation is both correct and
- * avoids that code path. Do not "fix" this to .linear().
+ * the Pedro docs show. This path does not change heading at all, so constant
+ * interpolation says what it means. Issues #176 and #181 report .linear()
+ * interpolating heading backwards on line paths in Pedro 3.0.0; 3.0.1 fixes it.
  */
-@Autonomous(name = "Auto: Drive 24in", group = "Corbels")
+@Autonomous(name = "Auto: Drive 24in", group = "3 Old")
 public class DriveForward24OpMode extends CorbelsAuto {
 
     /** How far to drive, in inches. */
     private static final double DISTANCE_IN = 24.0;
 
-    private final PoseFactory poses = PoseFactory.degrees();
-    private final Pose start = poses.of(0, 0, 0);
-    private final Pose end = poses.of(DISTANCE_IN, 0, 0);
+    private static final PoseFactory POSES = PoseFactory.degrees();
+    double robotHalfLengthIn = 9.0;
+    double fieldPerimeterWidthIn = 1.5;
+    double botStartYIn = robotHalfLengthIn + fieldPerimeterWidthIn;
+    private final Pose start = POSES.of(72, botStartYIn, 90);
+    private final Pose end = POSES.of(72, botStartYIn+DISTANCE_IN, 90);
 
     @Override
     public void init() {
@@ -45,12 +48,18 @@ public class DriveForward24OpMode extends CorbelsAuto {
     }
 
     @Override
-    protected Pose startPose() {
+    public Pose startPose() {
         return start;
     }
 
     @Override
-    protected Command routine() {
+    public void start() {
+        startBefore();
+        Scheduler.schedule(routine());
+        startAfter();
+    }
+
+    public Command routine() {
         return sequential(
                 follow(follower, driveForward())
                 // Add more steps here; each runs after the previous finishes.

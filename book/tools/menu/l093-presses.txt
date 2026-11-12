@@ -1,0 +1,15 @@
+INIT
+right
+B
+right
+A
+down
+left
+A
+down
+right
+right
+A
+right
+down
+up

@@ -37,18 +37,19 @@ nothing about the library needs to change.
 
 ## What FTC does not have
 
-**Voltage control.** An FTC motor takes power, -1 to 1. SysId's whole model is
-volts in, motion out.
+**Voltage control.** An FTC motor takes a speed, a fraction of battery voltage,
+-1 to 1. SysId's whole model is volts in, motion out.
 
 The way round it is the one every FRC brushed-motor setup uses implicitly:
-applied volts = commanded power times battery volts, read from the Control Hub's
+applied volts = commanded speed times battery volts, read from the Control Hub's
 own voltage sensor each loop. Battery sag then shows up as what it is -- the
-same power giving fewer volts -- rather than as noise in the fit.
+same speed giving fewer volts -- rather than as noise in the fit.
 
 That makes the numbers SysId returns genuinely volt-based, so kV comes out in
-volts per inch per second, and dividing by a nominal 12 V gives the
-power-per-inch-per-second constant that `Constants.powerPerInchPerSecond`
-holds today.
+volts per inch per second. L153 measures kS and kV in these units, into each
+robot's `pedro/Bot*.java`, and L157 and L190 divide their volts by the
+battery's volts each loop. `Constants.powerPerInchPerSecond`, Foresight's coast
+feedforward in fraction of full speed per inch per second, is deprecated.
 
 ## The tests to run
 
@@ -68,7 +69,7 @@ runs out of space; the dynamic runs take about a second.
 ## What to build
 
 **`SysIdRecorder`** (base) -- writes the state channel and the per-motor
-channels into the flight log, and computes applied voltage from power and
+channels into the flight log, and computes applied voltage from the speed and
 battery voltage. No hardware of its own.
 
 **`SysIdDriveOpMode`** (new `sysid` package) -- one OpMode. The driver picks a test
@@ -85,9 +86,9 @@ the analyzer expects.
 3. Open SysId, load the file, pick the state channel and one motor's three
    channels, set units to Inches.
 4. Read kS, kV, kA, and the feedback gains it suggests.
-5. `kV` in volts per inch per second becomes our power-per-inch-per-second by
-   dividing by 12; kS is the power needed just to start moving, which lesson 16
-   currently ignores.
+5. `kV` in volts per inch per second becomes our fraction of full speed per inch
+   per second by dividing by 12; kS is the fraction of full speed needed just
+   to start moving, which lesson 16 currently ignores.
 
 ## What this is not
 

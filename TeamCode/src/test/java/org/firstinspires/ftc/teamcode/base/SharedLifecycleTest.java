@@ -1,14 +1,17 @@
 package org.firstinspires.ftc.teamcode.base;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import com.pedropathing.api.PoseFactory;
 import com.pedropathing.ivy.Command;
+import com.pedropathing.ivy.Scheduler;
 import com.pedropathing.ivy.commands.Commands;
 import com.pedropathing.math.Pose;
 
+import org.firstinspires.ftc.teamcode.OpModeStorage;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -27,8 +30,7 @@ public class SharedLifecycleTest {
     public static class SampleTeleOp extends CorbelsTeleOp {
         public final List<String> calls = new ArrayList<>();
 
-        @Override protected void bindings() { calls.add("bindings"); }
-        @Override protected void shadowLocalizers() { calls.add("shadowLocalizers"); }
+        @Override public void shadowLocalizers() { calls.add("shadowLocalizers"); }
 
         @Override public void init() { initBefore(); initAfter(); }
 
@@ -45,21 +47,51 @@ public class SharedLifecycleTest {
         public final List<String> calls = new ArrayList<>();
         public boolean ran;
 
-        @Override protected Pose startPose() {
+        @Override public Pose startPose() {
             calls.add("startPose");
             return POSES.of(24, 24, 45);
         }
 
-        @Override protected Command routine() {
+        Command routine() {
             calls.add("routine");
             return Commands.instant(() -> ran = true);
         }
 
-        @Override protected void shadowLocalizers() { calls.add("shadowLocalizers"); }
+        @Override public void start() {
+            startBefore();
+            Scheduler.schedule(routine());
+            startAfter();
+        }
+
+        @Override public void shadowLocalizers() { calls.add("shadowLocalizers"); }
 
         @Override public void init() { initBefore(); initAfter(); }
 
         @Override public void loop() { loopBefore(); loopAfter(); }
+    }
+
+    /** An auto whose start() schedules nothing. */
+    public static class AutoThatSchedulesNothing extends CorbelsAuto {
+        public boolean ran;
+
+        @Override public Pose startPose() { return POSES.of(24, 24, 45); }
+
+        Command routine() { return Commands.instant(() -> ran = true); }
+
+        @Override public void init() { initBefore(); initAfter(); }
+
+        @Override public void loop() { loopBefore(); loopAfter(); }
+    }
+
+    @Test
+    public void anAutoRunsOnlyWhatItsOwnStartSchedules() {
+        AutoThatSchedulesNothing opMode = new AutoThatSchedulesNothing();
+        OpModeHarness h = new OpModeHarness(opMode);
+        h.init();
+        h.start();
+        h.loop();
+        assertFalse("nothing ran that start() did not schedule", opMode.ran);
+        h.stop();
     }
 
     @Test
@@ -72,9 +104,8 @@ public class SharedLifecycleTest {
         assertEquals("no hooks yet", 0, opMode.calls.size());
 
         h.start();
-        assertEquals("bindings before the shadow localizers",
-                "[bindings, shadowLocalizers]", opMode.calls.toString());
-        assertNotNull(opMode.buttons);
+        assertEquals("the shadow localizers at start",
+                "[shadowLocalizers]", opMode.calls.toString());
 
         h.loop();
         assertTrue(opMode.calls.contains("drive"));
@@ -87,7 +118,7 @@ public class SharedLifecycleTest {
     }
 
     @Test
-    public void anAutoGetsTheSameTreatmentPlusItsStartPoseAndRoutine() {
+    public void anAutoGetsTheSameTreatmentPlusItsStartPoseAndRunsWhatItsStartSchedules() {
         SampleAutoOpMode opMode = new SampleAutoOpMode();
         OpModeHarness h = new OpModeHarness(opMode);
 
@@ -106,6 +137,30 @@ public class SharedLifecycleTest {
 
         h.stop();
         assertEquals(0.0, h.forward(), 1e-9);
+    }
+
+    @Test
+    public void onlyAnAutoThatStopsSaysAnAutoHasRun() {
+        Pose theEndPose = OpModeStorage.autonomousEndPose;
+        boolean anAutoHadRun = OpModeStorage.autoHasRun;
+        try {
+            OpModeStorage.autoHasRun = false;
+            OpModeHarness teleop = new OpModeHarness(new SampleTeleOp());
+            teleop.init();
+            teleop.start();
+            teleop.stop();
+            assertFalse("a teleop does not", OpModeStorage.autoHasRun);
+
+            OpModeHarness auto = new OpModeHarness(new SampleAutoOpMode());
+            auto.init();
+            auto.start();
+            assertFalse("an auto still running does not", OpModeStorage.autoHasRun);
+            auto.stop();
+            assertTrue("an auto stopped does", OpModeStorage.autoHasRun);
+        } finally {
+            OpModeStorage.autonomousEndPose = theEndPose;
+            OpModeStorage.autoHasRun = anAutoHadRun;
+        }
     }
 
     @Test

@@ -1,6 +1,7 @@
 package org.firstinspires.ftc.teamcode.logcheck;
 
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
+import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.IMU;
 
@@ -21,7 +22,8 @@ import org.firstinspires.ftc.teamcode.pedro.Constants;
  * should go round in a circle), Circle/Pose3d onto the 3D field, and look at
  * Circle/Speeds and Circle/Wheels in a table.
  */
-@TeleOp(name = "Log 5: geometry", group = "LogCheck")
+@Disabled
+@TeleOp(name = "Log 5: geometry", group = "4 LogCheck")
 public class LogCheck5GeometryOpMode extends OpMode {
 
     private static final double METRE_IN_INCHES = 39.3700787401575;

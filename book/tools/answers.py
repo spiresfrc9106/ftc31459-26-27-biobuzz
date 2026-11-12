@@ -1,14 +1,16 @@
-"""Generate the answer pages from the two lesson lines.
+"""Generate the answer pages from what applying the patches does.
 
-For every lesson file the lessons line marks with a TODO, this reads the same
-path from the solutions line and writes what fills each blank. Both files come
-out of git rather than the working tree, so the answers are pinned to the
-commits keep.toml names and a regeneration gives the same pages.
+A student works in mytry: each lesson copies a file in and changes it, and the
+solutions line keeps those changes as patches in solutions/, in the order a
+student meets them. tools/applied.py applies them on the solutions line keep.toml
+names, and this writes one page per mytry file: for each lesson that patches it,
+in that order, what the file held just before the patch and what the patch put
+there. The solutions line is read out of git rather than the working tree, so a
+regeneration gives the same pages.
 
-Aligning the two files with difflib rather than parsing Java is deliberate: a
-blank is wherever the two lines differ, which is exactly what the student has to
-write. Every difference is emitted, and one that carries no TODO is labelled as
-such, so a page cannot quietly leave a blank out.
+Aligning the two sides with difflib rather than parsing Java is deliberate: a
+change is wherever the two sides differ, which is exactly what the student has
+to write. A change made only of comments is counted and not shown.
 
 Run it with --check to compare against what is committed instead of writing.
 """
@@ -17,13 +19,15 @@ import argparse
 import difflib
 import subprocess
 import sys
+import textwrap
 from pathlib import Path
 
+from applied import Patched, apply_all
 from bookpaths import book_root
 from register import load
 
 LESSONS_DIR = "TeamCode/src/main/java/org/firstinspires/ftc/teamcode/lessons"
-OUT = "source/answers"
+OUT = "source/r950"
 
 
 def pins() -> tuple[str, str]:
@@ -65,20 +69,6 @@ def lesson_files(lessons: str) -> list[str]:
     return found
 
 
-def todo_numbers(block: list[str]) -> str:
-    """How a block of lessons-line lines names itself, for the heading."""
-    numbers = []
-    for line in block:
-        marker = line.find("TODO")
-        if marker < 0:
-            continue
-        rest = line[marker + 4:].strip().rstrip(":")
-        numbers.append("TODO " + rest.split(":")[0].strip() if rest else "TODO")
-    if not numbers:
-        return "An unmarked difference"
-    return numbers[0]
-
-
 def only_comment(block: list[str]) -> bool:
     """Is this block nothing but comment lines?
 
@@ -116,54 +106,91 @@ def differences(blank: list[str],
     return out
 
 
-def blanks(blank: list[str], filled: list[str]) -> tuple[list[tuple[int, int, int, int]], int]:
-    """The differences that are blanks, and how many differences were not."""
-    found = differences(blank, filled)
-    kept = [(i1, i2, j1, j2) for i1, i2, j1, j2, is_blank in found if is_blank]
-    return kept, len(found) - len(kept)
+CONTEXT = 3  # unchanged lines shown on each side of a change
 
 
-def fence(block: list[str]) -> str:
-    body = "\n".join(line.rstrip() for line in block) or "(nothing)"
-    return f"```java\n{body}\n```"
+def hunks(before: list[str], after: list[str]) -> tuple[list[list[tuple]], int]:
+    """The groups of changes a diff shows, and how many runs of comment lines it leaves out.
+
+    A group whose every change is comment lines carrying no TODO is left out, as
+    `differences` labels them: a `Passes when:` line is not something a student
+    writes. A comment change inside a group with code in it is shown with the code.
+    """
+    matcher = difflib.SequenceMatcher(None, before, after, autojunk=False)
+    comment_only = {(i1, i2, j1, j2) for i1, i2, j1, j2, is_blank in differences(before, after)
+                    if not is_blank}
+    shown, hidden = [], 0
+    for group in matcher.get_grouped_opcodes(CONTEXT):
+        changes = [tuple(op[1:]) for op in group if op[0] != "equal"]
+        if all(change in comment_only for change in changes):
+            hidden += len(changes)
+        else:
+            shown.append(group)
+    return shown, hidden
 
 
-def page(path: str, blank: list[str], filled: list[str], solutions: str) -> str:
-    name = Path(path).stem
+def diff(path: str, lesson: str, before: list[str], groups: list[list[tuple]],
+         after: list[str]) -> str:
+    """One lesson's changes to one file, as a coloured diff numbered by the file after it.
+
+    The class `answer-diff` set the diff in a smaller type in the PDF, which is no longer
+    made; no style reads it now.
+
+    An unchanged line and an added one carry their line number in the file after the
+    lesson; a removed line has none, since it is not in that file.
+    """
+    short = path.split("/teamcode/", 1)[-1]  # from mytry/, the folder the student works in
+    out = ["```{code-block} diff", ":class: answer-diff", "", f"--- {short}  (before {lesson})",
+           f"+++ {short}  (after {lesson})"]
+    for group in groups:
+        out.append(f"@@ lines {group[0][3] + 1} to {group[-1][4]} @@")
+        for tag, i1, i2, j1, j2 in group:
+            if tag == "equal":
+                out += [f"  {k + 1:3} {after[k]}".rstrip() for k in range(j1, j2)]
+                continue
+            out += [f"-     {before[k]}".rstrip() for k in range(i1, i2)]
+            out += [f"+ {k + 1:3} {after[k]}".rstrip() for k in range(j1, j2)]
+    out.append("```")
+    return "\n".join(out)
+
+
+def label(lesson: str) -> str:
+    """`l17a` as a reader writes it: `L17a`."""
+    return "L" + lesson[1:]
+
+
+def page(path: str, patches: list[Patched], solutions: str, name: str) -> str:
     out = [f"# {name}", ""]
-    out.append(f"The blanks in this file, filled in from `{solutions}`:")
+    # Wrapped, since the solutions' name grows when it is pinned to a tag.
+    out += textwrap.wrap(
+        "What each lesson's patch does to this file, in the order the lessons come, from "
+        f"applying `solutions/` on `{solutions}`. A line marked + is new, and a line marked - "
+        "is gone; each number is the line's place in the file after the lesson.", 100)
     out.append("")
-    out.append(f"`{path}`")
-    out.append("")
-    kept, comments = blanks(blank, filled)
-    for i1, i2, j1, j2 in kept:
-        out.append(f"## {todo_numbers(blank[i1:i2])}")
+    for patch in patches:
+        out.append(f"## {label(patch.lesson)}")
         out.append("")
-        out.append("What the lesson leaves blank:")
+        before = [line.rstrip("\n") for line in patch.before]
+        after = [line.rstrip("\n") for line in patch.after]
+        groups, comments = hunks(before, after)
+        if groups:
+            out.append(diff(path, label(patch.lesson), before, groups, after))
+        else:
+            out.append("Nothing but comments changes in this lesson.")
         out.append("")
-        out.append(fence(blank[i1:i2]))
-        out.append("")
-        out.append("What the solutions line has there:")
-        out.append("")
-        out.append(fence(filled[j1:j2]))
-        out.append("")
-    if not kept:
-        out.append("No blank in this file: nothing but comments differs between the two lines.")
-        out.append("")
-    if comments:
-        out.append(f"The two lines also differ in {comments} run(s) of comment lines, which are not")
-        out.append("blanks and are not shown.")
-        out.append("")
+        if comments:
+            out.append(f"It also changes {comments} run(s) of comment lines, which are not shown.")
+            out.append("")
     return "\n".join(out)
 
 
 def index(names: list[str]) -> str:
     entries = "\n".join(names)
     return (
-        "# Answers\n"
+        "# 950 reference: answers\n"
         "\n"
-        "The real code, out of the solutions line. Use it when you are stuck, not instead of being\n"
-        "stuck.\n"
+        "What each lesson changes, file by file, out of the solutions line. Use it when you are\n"
+        "stuck, not instead of being stuck.\n"
         "\n"
         "```{toctree}\n"
         ":maxdepth: 1\n"
@@ -173,15 +200,22 @@ def index(names: list[str]) -> str:
     )
 
 
-def generate() -> dict[str, str]:
-    lessons, solutions = pins()
+def generate(solutions: str | None = None) -> dict[str, str]:
+    solutions = solutions or pins()[1]
+    patched, _, _ = apply_all(solutions)
+    by_file: dict[str, list[Patched]] = {}
+    for patch in patched:
+        by_file.setdefault(patch.path, []).append(patch)
+    # A file's page is named by the file, or, where two lessons' folders hold a file of the same
+    # name, such as L065's and L157's StickShaper, by its folder and the file.
+    stems = [Path(path).stem for path in by_file]
+    names = {path: Path(path).stem if stems.count(Path(path).stem) == 1
+             else f"{Path(path).parent.name}-{Path(path).stem}" for path in by_file}
     pages = {}
-
-    for path in lesson_files(lessons):
-        blank = git("show", f"{lessons}:{path}").splitlines()
-        filled = git("show", f"{solutions}:{path}").splitlines()
-        pages[Path(path).stem + ".md"] = page(path, blank, filled, solutions)
-    pages["index.md"] = index(sorted(name[:-3] for name in pages))
+    for path, patches in by_file.items():
+        pages[names[path] + ".md"] = page(path, patches, solutions, names[path])
+    # In the order a student first meets each file, which is the order they patch it in.
+    pages["index.md"] = index([names[path] for path in by_file])
     return pages
 
 
@@ -189,13 +223,17 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true",
                         help="compare with what is committed instead of writing")
+    _, pinned_solutions = pins()
+    parser.add_argument("--solutions", default=pinned_solutions,
+                        help=f"the solutions ref to read (default {pinned_solutions},"
+                             " from keep.toml)")
     args = parser.parse_args()
 
-    lessons, solutions = pins()
-    print(f"reading {resolved(lessons)} and {resolved(solutions)}")
+    solutions = args.solutions
+    print(f"applying solutions/ on {resolved(solutions)}")
 
     out = book_root() / OUT
-    pages = generate()
+    pages = generate(args.solutions)
 
     if args.check:
         problems = 0
@@ -211,10 +249,10 @@ def main() -> int:
                 print(f"{OUT}/{name}: differs from what the generator produces")
                 problems += 1
         if problems:
-            print(f"\n{problems} answer page(s) out of step with the lesson lines."
+            print(f"\n{problems} answer page(s) out of step with the patches."
                   f" Run tools/answers.py and commit what it writes.")
             return 1
-        print(f"{len(pages) - 1} answer page(s) match the two lines.")
+        print(f"{len(pages) - 1} answer page(s) match the patches.")
         return 0
 
     out.mkdir(parents=True, exist_ok=True)

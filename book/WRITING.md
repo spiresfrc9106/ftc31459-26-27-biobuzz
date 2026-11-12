@@ -1,13 +1,192 @@
 # How the guide is written
 
-**Status: controlling.** Written 2026-09-27.
+**Status: controlling.** Written 2026-09-27; the lesson page format added 2026-10-05; page types
+added 2026-10-10.
 
 The register and the voice belong to
 [`prose-style.md`](../../.claude/rules/parts/prose-style.md) and nothing here repeats it. What is
 here is what that file does not say: the shape of a task page, how words are introduced, what a
 picture has to be, and what a simplification may do.
 
-## Every task page has the same five parts
+## Every page has a type and a number
+
+A page is one of the four types [Diátaxis](https://diataxis.fr/) names, or a body page. Each type
+has a letter:
+
+- **L, a lesson**: the student builds something, one step at a time. Diátaxis calls it a tutorial.
+- **H, a how-to**: the steps for one job, such as installing the tools or working Android Studio's
+  panes.
+- **R, a reference**: something to look up, such as the glossary or the keyboard shortcuts.
+- **E, an explanation**: what is happening inside the computer when the code a lesson wrote runs.
+- **B, a body page**: the words that join the book together, such as the welcome.
+
+Every page has one number, from 000 to 999, and the numbers are the book's order, whatever the
+type. A page's id is its letter and its number, `L020` or `E021`, and its file is the id in lower
+case, `source/tasks/l020.md`. The answers, which `tools/answers.py` writes, are a folder,
+`source/r950/`.
+
+**A page's title is its number, then its type in words**: `# 020 lesson: read the sticks`,
+`# 011 how-to: get started on Windows`, `# 900 reference: Pedro routes` and
+`# 021 what's happening: assignments`. A body page has a title of its own after its number:
+`# 003 welcome`.
+
+**Write every title and heading in lower case**, except a proper noun: `## the steps`,
+`## Android Studio's window`, and a contents caption such as `get started`. The book's own name,
+Corbels FTC Programming Lessons in Java, is a name. A part's bold label inside a step, **Copy.** or
+**Check.**, starts a sentence and keeps its capital.
+
+**An E page opens with what the computer does with a program**, in these words: "When the
+computer runs your program, it reads one line of code at a time. It moves words and numbers around
+in its memory. It is like moving sticky notes around on your desk." Then it takes the lesson's
+lines one at a time. It comes right after its lesson, which links to it at the end.
+
+`tools/check_order.py`, in `ninja book`, checks each file's name and title, and that both front
+pages list the pages in number order.
+
+## A lesson page is one page for both books
+
+A lesson's steps are named L*nnn*S*nnn*, counting by 10s, and a how-to's H*nnn*S*nnn*. B010 points
+to one how-to per computer, H011 to H013.
+
+**What the student book shows**, the shape backed by the research in `ftc-claude`'s
+`.docs/2026-10-03-two-books.md`:
+
+- **A picture of what you will have**, first, with one sentence about the robot, not the code.
+- **Before you start**, after it: the pages this one needs finished, then what the lesson needs at
+  hand, such as a gamepad, the robot or clear floor, as bullets written by hand. The list of pages
+  is written by `tools/needs.py` between its markers, which it adds, from what the code needs and
+  from `needs.toml`; edit `needs.toml` and run `python tools/run.py needs apply`, never the list.
+  `RELEASING.md`'s *A lesson's needs* says how. What an earlier lesson leaves, such as the class
+  `mytry` holds, is mentor-only, under **What the lessons before leave.**
+- **The steps**, each a `### L020S010: read the left stick` heading, counting by 10s. A step is one
+  change to the code, then tried everywhere it runs, in this order, leaving out a part the step
+  does not need:
+  - **Copy**: a file copied into `mytry`, or within it.
+  - **Change**: one edit or a few small ones in `mytry`, with the changed lines highlighted.
+  - **Simulator**: `simRun`, watched live in AdvantageScope.
+  - **AdvantageScope**: what to open or set to see the result, connected to the simulator or, on
+    the robot's Wi-Fi, to the robot.
+  - **Log**: the same values in the flight log, from the repository's top folder.
+  - **Send**: the code sent to the robot, and the OpMode picked and started on the Driver Station.
+  - **Robot**: what to do with the robot. A part can instead be named for that one thing, as
+    **Push**, **Spin** or **Drive**.
+- **Check**: after each part that changes what the student sees, a bulleted list of what they see
+  when it worked, one thing to look at or do per item.
+- **What's happening**: not on the lesson page. What the code just did, drawn as sticky notes, or
+  why it works, is an E page after the lesson, and the lesson's last line links to it. The student
+  does nothing in it.
+
+Each part is one or two imperative sentences. A part leads with its name in bold, not a heading.
+
+**A student's simulator check drives with the gamepad.** The **Simulator** part runs `simRun` with
+`--pad`, and the check says what to do with the sticks and buttons. A run with typed flags, such as
+`--left_stick_y=-0.5`, is for a mentor with no gamepad, in a **No gamepad.** block.
+
+H017, *navigate Android Studio's panes*, comes before L020. It changes no code, so it has no step
+names, and its parts are named for what the student does: **Click**, **Drag**, **Theme**, **View**,
+**Find**, **Sync**, **Target** and **Build**.
+
+**Break a skill into its parts the first times it is taught, then trust the student with it.** A
+skill is what the pages ask for again and again: copying a starter, switching a copy on, running
+the simulator, connecting AdvantageScope, sending the code and running it on the robot, importing a
+class. The first time, each part of it has its own name and its own **Check**. It is broken down
+once more if the next lesson to use it is close, and twice more if that lesson is many lessons
+later. After that, one part names the whole skill, as **Robot.** Send the code, run `L070 Buttons`
+from the Driver Station, and watch it in AdvantageScope. `ftc-claude`'s
+`.docs/2026-10-05-lessons-restructure.md` lists where each skill is broken down.
+
+**Write a Check as a bulleted list, even of one item.** `**Check.**` stands alone, then a blank
+line, then the list, with no blank line between items. An explanation goes after the list, not in
+it. The Microsoft Style Guide's
+[step-by-step
+instructions](https://learn.microsoft.com/en-us/style-guide/procedures-instructions/writing-step-by-step-instructions)
+uses a bullet for a single step, to match the lists around it.
+
+**Set apart each action a student does for the first time.** Where a part breaks a skill down,
+its name stands alone, then `{.steps}` on the line above a bulleted list, one action per item,
+with a blank line between items. `_static/steps.css` puts a line of space between them in the HTML.
+The PDF does not show the space. Every other list stays close. The sources:
+
+- USWDS [Typography](https://designsystem.digital.gov/components/typography/): "Use less
+  whitespace to group elements and more whitespace to distinguish them from each other."
+- digital.gov [Lists](https://digital.gov/guides/plain-language/design/lists/): "Add white space
+  for easy reading."
+- The Microsoft Style Guide, above: "Use a separate step for each instruction."
+
+
+**What only the mentor book shows**, each in a `{only} mentor` block that leads with bold text:
+
+- **If it didn't**: under a check, only where a failure was seen, written as *Write the check
+  from a failure somebody saw* says.
+- **What you just did**: one paragraph of theory.
+- **Where next**: the lessons this one unlocks.
+- **Skills needed**, **Skills learned** and **Concepts learned**: after *Before you start*'s mentor
+  blocks on a lesson, and after the title on a what's-happening page, written by `tools/needs.py`
+  between its `skills` markers, which it adds; run `python tools/run.py needs apply`, never edit the
+  lists. Each time a lesson or what's-happening page is written or changed, update what makes them:
+  - **A skill a step uses from an earlier page** is a `skill:` entry in `needs.toml` on the lesson,
+    naming the page that teaches it. It lists under that lesson's *Skills needed* and that page's
+    *Skills learned*. Name a skill in the same words each time.
+  - **Each other skill the lesson teaches** goes in `learned.toml`'s `skills`.
+  - **The ideas that matter for programming and robot control** go in `learned.toml`'s
+    `concepts`, each opening with its area.
+
+  `tools/check_needs.py` fails a lesson that teaches no skill, a lesson or what's-happening page
+  that teaches no concept, and a list that is not what `apply` writes.
+
+The code a student copies carries a comment where each step changes it, linking to the step.
+`source/conf.py` gives each step heading its name as its anchor:
+
+```java
+// When on L020S010, see
+// https://coding.stitt.cc/ftc-lessons-java/guide/tasks/l020.html#l020s010
+// for what to do here.
+```
+
+**A Java block names its file.** It is a `{code-block} java` whose `:caption:` is the file's path
+under `teamcode/`, with `(test) ` in front for a test, such as
+`(test) mytry/l093/MenuItemTest.java`, or `pedro/Bot*.java` for the robot's constants file.
+`labels.css` draws it as a grey tab on the block's top edge. A code example that is in no file, such
+as E021's `double leftStickY`, has `:class: example` in place of a caption. `tools/check_labels.py`
+fails a Java block with neither, and a line that is not in its file as the page leaves it. A line a
+later step on the page deletes or changes is read at its own step.
+
+## A lesson can have the student write whole classes
+
+L065 is the first, with one class and no test of its own; its diagrams are on E067, the page
+after it. L093 is the first with each part below. Their pages and starters are written this way:
+
+- **Its own folder.** The lesson's classes are in `mytry/lnnn/`, package `...mytry.lnnn`, named
+  without the lesson number, such as `MenuItem`; its tests are in `mytry/lnnn/` under `test`. The
+  starters are in `lessons/lnnn/`, and a step copies the folder whole. A class or member another
+  lesson's code calls from outside the folder is `public`.
+- **What it does first, press by press.** After the picture, the page shows the code working as
+  the driver sees it, not as the code holds it: one picture for each press, beside the screen it
+  leaves, made from `tools/menu/`'s captured screens. They define it fully.
+- **Then each class, from the bottom up.** A section for each class gives its one job, its class
+  diagram, what each field holds and what each method does, then a short sequence diagram for each
+  way it works with the classes it holds, then the steps that test it and write it. Each diagram
+  is written in Mermaid and drawn by `draw.py`, as *Draw in the marker-sketch style* says, and
+  registered in `FIGURES.md`, as *A picture is registered before it is drawn* says.
+- **A class's starter is a header**: its class Javadoc and step pointer only. The student types
+  the `package` line, the imports and the class. The OpMode's starter is like other lessons', with
+  step pointers where the student types.
+- **Each test is written before the code it tests.** Test starters are in `src/test/.../lessons/`,
+  and are copied into the `mytry` folder under `test`. A step types a test, runs it and watches it
+  fail, then types the code until it passes.
+- **Build** and **Test** are parts of a step. They run
+  `./gradlew :TeamCode:compileDebugJavaWithJavac` and
+  `./gradlew :TeamCode:testDebugUnitTest --tests '*mytry.lnnn*'`, with the lesson's own number;
+  the check is `BUILD SUCCESSFUL`.
+
+## A challenge exercise follows the steps, under its own heading
+
+A lesson's challenge exercise is a `## challenge exercise: ...` section after its last step, and an
+extra challenge exercise a `## extra challenge exercise: ...` section after that. Each opens by
+saying it is a challenge and, for the first, that no later lesson needs it. Its steps keep counting
+from the lesson's last, and the mentor blocks stay at the end of the page. L132 has the first.
+
+## The old pages have five parts
 
 - **What you will have when this is done.** One or two sentences, about the robot and not about the
   code. A student deciding what to do next reads only this.
@@ -24,8 +203,15 @@ picture has to be, and what a simplification may do.
 ## Write the check from a failure somebody saw
 
 An **if it didn't** line names the symptom a student will actually see. A guessed symptom sends them
-looking for something that never appears, which is worse than saying nothing. Where the failure has
-not been reproduced, the line says it comes from reading the code rather than from a robot.
+looking for something that never appears, which is worse than saying nothing.
+
+## Say nothing about what has been run, tried or seen
+
+A page, a README or a comment in this repository says what to do and what you will see. It does
+not say whether a step has been performed, when something was tried or seen, or what is still
+unknown. That record is kept in the `ftc-claude` repository, and only there. Naming a source, such
+as Pedro's tuning page, is not a record and stays. Neither is a dated measurement in a code comment,
+such as "Measured on 2026-09-28: …", which says why the code is the way it is.
 
 ## Put the explanation in the step that needs it
 
@@ -39,11 +225,175 @@ introduced it.
 never says something a student will later have to unlearn silently: where a simplification gets
 corrected later, the page says so in one line and names the task that corrects it.
 
+These simplifications are made everywhere, and are not marked:
+
+- **A field is called a variable.** `gamepad1` and `hardware` are fields of the OpMode.
+- **A class used through its static methods is called an object.** `Tracker` is a class.
+- **A variable that refers to an object is not called a reference.**
+- **What a variable holds before its first assignment is not said.**
+
+## Write the code a student types one idea at a time
+
+- **One idea per statement.** A value worked out, named and tested is three statements, and each
+  result has a name: `double alwaysPositiveMagnitude = Math.abs(value);`, then
+  `boolean isCloseToZero = alwaysPositiveMagnitude < band;`, then `if (isCloseToZero) {`.
+- **No call inside another call's arguments.** Each result gets its own variable first:
+  `double forward = deadband(-leftStickY, band);` then `forward = signedSquared(forward);`. A call
+  that reads a setting or builds a path stays inside, as
+  `hardware.mecanumConfig.frontLeftDirection.get()` and `line(start, end).constant(start)` do.
+- **A method returns a named variable, not a calculation.** Break the work into small steps, each
+  named, so a student reads it one step at a time rather than one line that only an expert reads.
+  Not `return value * Math.abs(value);` but:
+
+  ```java
+  double signedSquared(double value) {
+      double alwaysPositiveValue = Math.abs(value);
+      double valueSquaredKeepingTheSign = value * alwaysPositiveValue;
+      return valueSquaredKeepingTheSign;
+  }
+  ```
+  Android Studio's *Redundant local variable* flags such a variable. The project turns that off
+  for one returned at once, with *Ignore immediately returned or thrown variables* in
+  `.idea/inspectionProfiles/Project_Default.xml`.
+- **A method's name fits what it does.** A getter starts with `get`, as `getSelected`, and a setter
+  with `set`, as `setBand`. A method that takes an action starts with a verb naming it:
+  `driveFromTheSticks`, `goRight`. A method that converts names what it works out, `signedSquared`,
+  or what goes in and what comes out where that reads more clearly: `mixArcadeToWheelSpeeds`.
+- **A name says what kind of value it holds, and in which frame.** `forwardXSpeed`, not `forward`;
+  `wheelSpeeds`, not `wheels`.
+- **A set of things may share a short abbreviation when names get long.** `fl`, `fr`, `bl` and
+  `br` for front left, front right, back left and back right. Lower case and an underscore are
+  allowed where lowerCamelCase hides the abbreviation: `fl_speed`, not `fLSpeed`. Weigh the
+  abbreviation against spelling it out and a long line, and choose what a person reads most easily.
+- **A value whose meaning changes gets a new name.** `biggestOrOne`, not `biggest` given 1.0.
+- **A published key is the variable's name, under the robot system it belongs to.**
+  `Tracker.publish("drivetrain/forwardXSpeed", forwardXSpeed)`, not `"arcade/forward"`. A system
+  is split by the parts of its algorithm only when it holds too much to read otherwise.
+- **A blank line separates the steps of a method.**
+- **A loop that reads each item of one list is a for-each loop**, `for (MenuRow row : rows)`,
+  with no index to count. A loop that pairs arrays by index keeps its `i`, as L113's and L190's
+  do.
+- **`Math.max` takes two numbers**, so the largest of four is a chain of calls, each on its own
+  line.
+- **A whole-number `float` or `double` is written with `.0` in code**, and where a page names
+  code: `1.0`, `0.0`, `-1.0`, so the student sees they are working with a decimal number. A value a
+  tool shows, such as an AdvantageScope reading, is written as the tool shows it: `x_in` 72.
+  Speech, such as the video's captions, says -1, 0 and +1. A command-line argument is not code,
+  and is written the quick way a person types it: `--left_stick_y=-1`.
+- **Call a value "power" only when it is physical power, or what a PID or PIDF loop gives
+  `setPower`.** A `setPower` argument is a fraction of battery voltage, from -1.0 to 1.0. Battery
+  voltage applied to a motor is closest to the motor's speed, so we call it a speed fraction:
+  `SPEED_FRACTION` in a constant and `speedFraction` in a variable, as `Intake`'s
+  `STOPPED_SPEED_FRACTION` does. A gamepad stick is also a fraction from -1.0 to 1.0, in the
+  stick's own reference frame. Read it into a variable named for the stick, such as `leftStickY`,
+  and only then into a speed fraction in the robot's or the field's reference frame:
+  `double forwardXSpeedFraction = -leftStickY;`. Reading the stick straight into a speed fraction
+  is one line shorter, and hides the switch between reference frames that
+  [E035](source/tasks/e035.md) teaches. In PID or PIDF code a true speed, such as ticks per
+  second, goes into the loop, and what comes out for `setPower` is a power fraction, as
+  `launcher_kS_powerFraction` does. Names that are not ours keep their spelling: the SDK's
+  `setPower` and `ZeroPowerBehavior`, and Pedro's `DrivePowers` and `headingPower`.
+
+## The code a student copies is plain Java
+
+- **Package-private by default.** A modifier is written only where the code will not work without
+  it, and then it is `public`. From L093, which teaches it, a field of a lesson's own class is
+  `private`. No lesson teaches `protected`.
+- **A starter line that cannot compile yet is commented out**, and the step that makes it compile
+  has the student delete the `//`, as L070S020 does for the student's `StickShaper`.
+- **Every modifier has a comment on the line before it**, saying what forced it and what it allows.
+  The phrases are in `ftc-claude`'s `.docs/modifiers-explanation.md`.
+- **The code we give the students has Javadoc**, and no lesson asks a student to write any.
+- **`mytry` holds no `package-info.java`.**
+- **A student page uses AdvantageScope, not Panels.** Panels stays in the code for driving the robot
+  without a Driver Station, and its page, H096, is in the mentor book only.
+
+## Say nothing about what the lessons do not teach
+
+What just works for a student and no lesson teaches, such as `.gitignore`, is not named on a page.
+
+## Write American English
+
+Tire, color, labeled, center.
+
 ## A picture is registered before it is drawn
 
 Every figure has a row in [`FIGURES.md`](FIGURES.md) and an id of the form `fig-<something>`. A
 figure that does not exist yet is a pencilled box in the page, so the gap is visible to a reader and
-not blocking to a writer. `tools/check_figures.py` checks both directions.
+not blocking to a writer. The box shows the row's *What it must show*, which the build puts there,
+so write it only in the row. A figure no page shows any more is marked `unused` in its row, not
+deleted. `tools/check_figures.py` checks both directions. The build captions each figure it puts
+in place with its file's name, such as `fig-l135-press-01.png`, small at the right.
+
+## Show the field the student's own driving makes
+
+A step checked on AdvantageScope's 2D Field has the student drive the robot around the field with
+the gamepad, and its picture shows the field that driving makes: the robot partway around, on the
+field, its trail behind it. A picture of the robot driven by sticks held still, heading off the
+field, shows the student a field their driving never makes. [`FIGURES.md`](FIGURES.md) says how
+the picture is taken.
+
+## Draw in the marker-sketch style
+
+A drawing, as against a screenshot or a plot, is drawn by `tools/draw.py` in the look of
+an industrial designer's marker sketch, made flat: ink lines that run past their corners, faint
+construction lines, slanted marker fills, a red or orange accent, white highlights and soft
+shadows, words in Marker Felt and code in Menlo. A variable is a white label with an arrow to a
+sticky note that curls off the page and is colored by its type: yellow for `double` and `float`,
+green for `boolean`, blue for an object. A plot of numbers, such as `fig-stick-shaping`, stays
+plain. A drawing is the guide's picture, not a stand-in for a photo. `draw.py`'s docstring holds the
+details.
+
+A diagram of classes or of calls is written in Mermaid, as `tools/mermaid/<id>.mmd`. `draw.py` has
+mermaid-cli lay it out with Menlo as its font, then draws its boxes, words and arrows again in this
+style. mermaid-cli is installed by `npm ci` in `book/`, which needs Node 22.13.0 or later; it
+installs the Chrome mermaid-cli draws with into `book/.cache`.
+
+`draw.py` draws a diagram on paper the column's width, 736 px, with the diagram in its middle and
+a Mermaid pixel drawn as a CSS pixel, so its text is the size of the body's. A diagram too wide
+for the column stops the draw; it is laid out narrower, by breaking a long name onto two lines
+with `<br/>` and wrapping long messages, rather than shrunk.
+
+Each class in a diagram has its own colour, the same in each diagram it is in, from `draw.py`'s
+`MERMAID_COLORS`: its marker fill and, a darker shade, its outline. A class missing from it stops
+the draw with its name. A message's words sit on a box of paper, so the lifelines they cross stop
+around them.
+
+A diagram draws each class and object in full. Mermaid's `..>`, "uses", is drawn dashed with an
+open head.
+
+**A class diagram shows each class the sequence diagrams beside it show.** A class from outside
+the lesson, such as `Gamepad` or `Tracker`, shows only the methods the lesson's classes call.
+
+**Draw a variable as a sticky note**, the picture Ned Batchelder's
+[*Facts and myths about Python names and values*](https://nedbatchelder.com/text/names.html) uses
+for names and values:
+
+- **A variable or a field is a white label** holding its name in Menlo, with an arrow from a dot at
+  its end to a sticky note.
+- **The sticky note is labeled with its type** along its glue strip: a primitive type such as
+  `double` or `boolean`, or a class name.
+- **A primitive's sticky note holds its value**, large, such as `0.7`.
+- **An object's sticky note holds a label for each of its fields**, each with its own arrow to a
+  smaller sticky note on the big one.
+- **Each name sits close to its sticky note**, with a short arrow straight down or straight to the
+  right.
+- **An assignment is an orange arrow** carrying the value from where it is copied to where it goes.
+
+`=` is an action, assignment: put this value in this variable. The test for equality is `==`, which
+gives `true` or `false`.
+
+## One source makes two books
+
+- **The student book** is built with no tag, from `source/student_index.md`, into `build/html`.
+- **The mentor book** is built with `-t mentor`, from `source/index.md`, into `build/mentor`.
+
+`ninja book` builds both. B003, the welcome, is the first page of both. `MENTOR_ONLY` in
+`source/conf.py` lists the pages only the mentor book has.
+
+A mentor paragraph inside a shared page goes in a `{only} mentor` block, and so does any link to a
+mentor-only page; outside one, that link fails the student build. A mentor part leads with bold
+text, not a heading: a heading inside `only` brings the whole block into the student book.
 
 ## Running the gate
 
@@ -56,22 +406,26 @@ cd book && PATH="$PWD/.venv/bin:$PATH" ninja book
 `ninja -k 0 book` runs every check even when the first fails, which is what you want when fixing
 rather than gating. What each check does is in its own docstring.
 
-## Seeing what a blank asks a student to write
+## Pinning the solutions and releasing are in RELEASING.md
+
+How `keep.toml` names the solutions the answer pages come from, a round of lesson work, and
+building and making a release: [Lesson work and releases](../RELEASING.md).
+
+## Seeing what a lesson asks a student to do
 
 ```
 cd book && PATH="$PWD/.venv/bin:$PATH" ninja review
 ```
 
 `ninja review` writes a separate Sphinx site under `review/` and prints where the HTML landed. One
-page per lesson, one section per file, and each blank is the diff that filling it makes — starting
-from the file as a student sees it and applying one blank at a time, so the context carries the
-blanks already done.
+page per lesson: the files it copies, then one section per file its patches change, and each change
+is the diff that making it does, starting from the file as the copies left it and applying one
+change at a time, so the context carries the changes already made. Changes made only of comments
+are shown and labelled, because a page that says where code goes has to account for them.
 
-A blank in a file not named for a lesson lands on the lesson its marker names: `LessonsDriveTrain`
-writes `// TODO (L2):`, and that blank appears on the L2 page. A shared file whose class javadoc
-opens `L8:` gives that lesson to any of its blanks that name none. Add a shared blank with no lesson
-anywhere and the tool says so and fails.
+It comes from applying `solutions/` in order, the same as the answer pages, and checks that the
+changes applied one at a time rebuild what each patch left. `ninja book` builds it too.
 
-It is a view for reading, not a gate and not part of the guide: `ninja book` does not run it, and
-its pages are not committed. The answer pages under `source/answers/` say what fills each blank;
-this says how much work each one is.
+It is a view for reading, not part of the guide: its pages are not committed. The answer pages
+under `source/r950/` say what each lesson's patch changes in each file, from applying
+`solutions/` in order; this says what each lesson asks, and how much work it is.

@@ -3,6 +3,8 @@ package org.firstinspires.ftc.teamcode.base;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.hardware.Gamepad;
 
+import java.io.File;
+import java.io.IOException;
 import java.lang.reflect.Field;
 
 /**
@@ -13,9 +15,10 @@ import java.lang.reflect.Field;
  * <pre>
  * ./gradlew :TeamCode:simRun --args="--help"
  * ./gradlew :TeamCode:simRun --args="--pad-check"
- * ./gradlew :TeamCode:simRun --args="lessons.L2bTankOpMode"
- * ./gradlew :TeamCode:simRun --args="lessons.L2bTankOpMode --pad"
- * ./gradlew :TeamCode:simRun --args="lessons.L2bTankOpMode --left_stick_y=-1"
+ * ./gradlew :TeamCode:simRun --args="lessons.L040TankOpMode"
+ * ./gradlew :TeamCode:simRun --args="lessons.L040TankOpMode --pad"
+ * ./gradlew :TeamCode:simRun --args="lessons.L040TankOpMode --left_stick_y=-1"
+ * ./gradlew :TeamCode:simRun --args="mytry.l135.AutoWithMenuOpMode --init --pad"
  * </pre>
  *
  * <p>{@link SimArgs} holds the four forms, the 21 controls that can be set and
@@ -38,7 +41,7 @@ import java.lang.reflect.Field;
  * <p>A pass advances the simulated clock by the real time since the last pass
  * rather than by one instant, so the robot moves at the speed it would move on
  * the field however long a pass takes. Measured on this bench on 2026-09-29,
- * driving straight at full power and reading the pose off NetworkTables: an
+ * driving straight at full speed and reading the pose off NetworkTables: an
  * OpMode burning 25 ms in every loop ran at 0.398 of real time while a pass
  * advanced a fixed 10 ms, and at 1.001 once it advanced what it measured. An
  * OpMode with nothing in its loop runs at 1.000 either way.
@@ -52,6 +55,9 @@ public final class SimRun {
     static final String PACKAGE = "org.firstinspires.ftc.teamcode.";
 
     private static volatile boolean running = true;
+
+    /** Set when Enter is read, which ends INIT under {@code --init}. */
+    private static volatile boolean enterPressed = false;
 
     public static void main(String[] args) throws Exception {
         SimArgs.Plan plan = SimArgs.parse(args);
@@ -76,7 +82,10 @@ public final class SimRun {
                 System.exit(2);
                 return;
             }
+            // No HardwareMap here, so an OpMode's intake and launcher are stand-ins.
+            SimMechanisms.install(opMode.getClass());
             harness = new OpModeHarness(opMode);
+            harness.logTo(logHome());
         }
         Gamepad typed = null;
         for (String control : plan.controls) {
@@ -85,7 +94,14 @@ public final class SimRun {
             }
             set(typed, control);
         }
-        loop(plan, harness, typed);
+        try {
+            loop(plan, harness, typed);
+        } catch (IOException e) {
+            System.err.println("simRun: the NetworkTables server could not start on port "
+                    + SimPublisher.NT4_PORT + ": " + e.getMessage()
+                    + ". Is another simRun still running?");
+            System.exit(2);
+        }
     }
 
     /**
@@ -104,20 +120,33 @@ public final class SimRun {
      * the last step, so how far the robot goes follows real time rather than the
      * number of passes it took to get there.
      */
-    private static void loop(SimArgs.Plan plan, OpModeHarness harness, Gamepad typed) {
+    private static void loop(SimArgs.Plan plan, OpModeHarness harness, Gamepad typed)
+            throws IOException {
         Gamepad slot1 = harness == null ? new Gamepad() : harness.gamepad1;
         Gamepad slot2 = harness == null ? new Gamepad() : harness.gamepad2;
         boolean usePads = plan.form == SimArgs.Form.OPMODE_PAD
                 || plan.form == SimArgs.Form.PAD_CHECK;
 
         try (SimPublisher out = harness == null ? null : new SimPublisher(harness);
-                SimPads pads = usePads ? SimPads.open() : null) {
+                SimVirtualPads virtual = SimVirtualPads.open(
+                        System.getenv(SimVirtualPads.VARIABLE), usePads, System.out);
+                SimPads pads = !usePads ? null
+                        : SimPads.open(virtual == null ? null : virtual::attachFirst)) {
             if (harness != null) {
+                System.out.println("Flight log: " + harness.logFolder);
                 System.out.println(plan.opMode + " running. Connect AdvantageScope to 127.0.0.1"
                         + " as NetworkTables 4, and Ctrl-C to stop.");
                 harness.init();
-                harness.start();
+                if (plan.init) {
+                    System.out.println("INIT. The Driver Station's lines print below when they"
+                            + " change. Press Enter to start.");
+                    startOnEnter();
+                } else {
+                    harness.start();
+                }
             }
+            boolean inInit = harness != null && plan.init;
+            String shown = "";
             long origin = System.currentTimeMillis();
             long nowMs = origin;
             long tick = 0;
@@ -126,6 +155,9 @@ public final class SimRun {
             long lastGestures = -1;
             long lastReport = -1;
             while (running) {
+                if (virtual != null) {
+                    virtual.poll();
+                }
                 if (pads != null) {
                     pads.read(slot1, slot2);
                 }
@@ -134,7 +166,16 @@ public final class SimRun {
                 }
                 if (SimTicker.due(tick, lastStep, SimTicker.STEP_TICKS)) {
                     lastStep = tick;
-                    if (harness != null) {
+                    if (inInit && enterPressed) {
+                        inInit = false;
+                        System.out.println("Started.");
+                        harness.start();
+                    }
+                    if (inInit) {
+                        harness.initLoop();
+                        shown = printWhenChanged(harness.driverStation.text(), shown);
+                        out.publish();
+                    } else if (harness != null) {
                         harness.loop(SimTicker.stepWorth(nowMs - lastStepMs));
                         out.publish();
                     }
@@ -165,6 +206,45 @@ public final class SimRun {
         }
     }
 
+    /**
+     * The Driver Station's lines, printed when they are not what was printed
+     * last. A pass that printed nothing prints nothing here.
+     */
+    private static String printWhenChanged(String lines, String shown) {
+        if (lines.isEmpty() || lines.equals(shown)) {
+            return shown;
+        }
+        System.out.println("---- Driver Station");
+        System.out.println(lines);
+        return lines;
+    }
+
+    /**
+     * Reads the terminal on a thread of its own, so the loop never waits on it,
+     * and ends INIT at the first Enter. The {@code simRun} task hands the
+     * terminal to this program with {@code standardInput}.
+     */
+    private static void startOnEnter() {
+        Thread reader = new Thread(() -> {
+            try {
+                int c = System.in.read();
+                while (c != -1 && c != '\n') {
+                    c = System.in.read();
+                }
+                if (c == -1) {
+                    System.out.println("simRun: no keyboard reaches this run, so Enter cannot"
+                            + " end INIT; Ctrl-C to stop.");
+                    return;
+                }
+                enterPressed = true;
+            } catch (IOException e) {
+                System.out.println("simRun: the terminal could not be read: " + e.getMessage());
+            }
+        }, "simRun-enter");
+        reader.setDaemon(true);
+        reader.start();
+    }
+
     /** Ends the loop on Ctrl-C, so a try-with-resources still closes. */
     private static void stopOnCtrlC(Thread loopThread) {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -175,6 +255,17 @@ public final class SimRun {
                 Thread.currentThread().interrupt();
             }
         }));
+    }
+
+    /**
+     * Where the flight log goes: the repository's top folder, which the
+     * {@code simRun} task names in {@code sim.logDir}, so a student finds it
+     * beside the project rather than in a temp folder. {@code .gitignore} keeps
+     * a {@code .wpilog} there out of git. Run any other way, the folder it was
+     * started in.
+     */
+    static File logHome() {
+        return new File(System.getProperty("sim.logDir", ".")).getAbsoluteFile();
     }
 
     /** One OpMode by the part of its class name that follows {@link #PACKAGE}. */

@@ -1,6 +1,7 @@
 package org.firstinspires.ftc.teamcode.logcheck;
 
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
+import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
 import io.github.mikestitt.corbelsflightlog.FlightLog;
@@ -18,7 +19,8 @@ import java.io.File;
  *
  * <p>Afterwards: open http://192.168.43.1:8080/corbelsflightlog and download it.
  */
-@TeleOp(name = "Log 1: basics", group = "LogCheck")
+@Disabled
+@TeleOp(name = "Log 1: basics", group = "4 LogCheck")
 public class LogCheck1BasicsOpMode extends OpMode {
 
     private FlightLog log;

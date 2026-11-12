@@ -3,6 +3,93 @@
 Welcome! This repository contains the source code for FTC Team 31459, Corbels Gold, for
 the 2026-27 BIOBUZZ season.
 
+### The Corbels Programming Lessons and answers on the web
+
+The most recent release is at
+[coding.stitt.cc/ftc-lessons-java/guide](https://coding.stitt.cc/ftc-lessons-java/guide/), with
+[the mentor guide](https://coding.stitt.cc/ftc-lessons-java/mentor/) and
+[what the student writes](https://coding.stitt.cc/ftc-lessons-java/review/) beside it.
+[versions.html](https://coding.stitt.cc/ftc-lessons-java/versions.html) lists more versions.
+
+### Cheat sheet: the commands
+
+Run these from the repository root. `:TeamCode:test` skips the lessons package,
+because a blank and a regression look the same there; `:TeamCode:testLessons`
+runs it on its own.
+
+| What | Command |
+| --- | --- |
+| Build the app | `./gradlew :TeamCode:assembleDebug` |
+| Everything except the lessons | `./gradlew :TeamCode:test` |
+| The lessons only | `./gradlew :TeamCode:testLessons` |
+| One lesson's test | `./gradlew :TeamCode:testDebugUnitTest --tests '*LessonsTest.l125*'` |
+| Watch a lesson drive | `./gradlew :TeamCode:simRun --args="lessons.L040TankOpMode --pad"` |
+| Drive it without a gamepad | `./gradlew :TeamCode:simRun --args="lessons.L040TankOpMode --left_stick_y=-1 --right_stick_y=-1"` |
+| Watch Example Auto, its intake and launcher stand-ins | `./gradlew :TeamCode:simRun --args="example.ExampleAuto --init --pad"` |
+| Every option the simulator takes | `./gradlew :TeamCode:simRun --args="--help"` |
+| Check a gamepad, beside a running lesson | `./gradlew :TeamCode:simRun --args="--pad-check"` |
+| Check NetworkTables, beside a running **NetworkTables API check** | `./gradlew :TeamCode:ntApiCheck` — see [NETWORKTABLES.md](./NETWORKTABLES.md) |
+| Hot reload TeamCode only | `./gradlew deploySloth` — see [PANELS.md](./PANELS.md); it does not configure in this checkout |
+| Build the guide | `ninja book` in `book/`, with `book/.venv/bin` on `PATH` |
+| Build what a release publishes | `ninja publish-check` in `book/`, the same way — see [RELEASING.md](./RELEASING.md#building-what-a-release-publishes) |
+| Start a round: follow a solutions branch and its media | `python tools/run.py pin --follow solutions-X` in `book/`, the same way — see [RELEASING.md](./RELEASING.md#a-round-of-lesson-work) |
+| End a round: pin the solutions to a tag and the media to a commit | `ninja pin` in `book/`, the same way, before the merge to `dev` — see [RELEASING.md](./RELEASING.md#a-round-of-lesson-work) |
+| Try a release: a pre-release on `dev` | `git tag -a vX.Y.Z-rc.N -m "<what is new>"` on a commit of `dev`, and push the tag — see [RELEASING.md](./RELEASING.md#making-a-release) |
+| Release it | `git merge --ff-only <the commit>` on `main`, push `main`, then tag its head `vX.Y.Z` and push the tag — see [RELEASING.md](./RELEASING.md#making-a-release) |
+
+The OpMode name is whatever follows `org.firstinspires.ftc.teamcode`, so a lesson
+is `lessons.L040TankOpMode` and not `L040TankOpMode`.
+
+### Cheat sheet: the links
+
+| | |
+| --- | --- |
+| [Pedro Pathing](https://pedropathing.com/) | the path follower this code drives with |
+| [Ivy](https://pedropathing.com/docs/ivy) | the command scheduler on top of it |
+| [Panels](https://panels.bylazar.com/) | the dashboard: telemetry, graphs, field view, at `192.168.43.1:8001` |
+| [Sloth](https://github.com/Dairy-Foundation/Sloth) | hot reload, which pushes TeamCode alone in about a second |
+| [PANELS.md](./PANELS.md) | what those two need set up here, once |
+| [NETWORKTABLES.md](./NETWORKTABLES.md) | AdvantageScope live from the robot, and the robot test for it |
+| [launcher-troubleshooting.md](./launcher-troubleshooting.md) | what to try when the launcher stutters rather than holding its speed |
+| [FTC programming docs](https://ftc-docs.firstinspires.org/) | the SDK, Android Studio, the IMU, AprilTags |
+| [gm0](https://gm0.org/) | Game Manual 0, the community's how-to for everything else |
+| [Game and season materials](https://ftc.game/) | this season's manuals and field drawings |
+| [FIRST Inspires](https://www.firstinspires.org/) | the organisation, registration and events |
+| [AdvantageScope](https://docs.advantagescope.org/) | what opens a flight log, and what the simulator publishes to |
+| [goBILDA](https://www.gobilda.com/) | the Pinpoint, the pods and most of the hardware |
+| [REV Robotics](https://www.revrobotics.com/) | the hubs and the motors |
+| [AndyMark](https://www.andymark.com/) | field elements and more hardware |
+| [spiresfrc9106/ftc31459-26-27-biobuzz](https://github.com/spiresfrc9106/ftc31459-26-27-biobuzz) | the team's repository, which this one tracks |
+
+### goBILDA's StarterBot
+
+If an OpMode is not listed on the Driver Station, check whether its class is `@Disabled`.
+
+37523 and 31459 are goBILDA's
+[StarterBot with Mecanum Wheels](https://www.gobilda.com/ftc-starterbot-with-mecanum-wheels-resource-guide-2026-2027/),
+stock, with a Pinpoint. 88888 is a Pinpoint and a drivetrain, with no intake, launcher or windmill.
+**StarterBot TeleOp** and **StarterBot Auto** are similar to goBILDA's example code, written in
+`StarterBotTeleOp`, `StarterBotAuto`, `Intake` and `Launcher`. **88888 Auto** and **88888 TeleOp**
+drive robot 88888.
+
+Main competition code is in **Example Auto** and **Example TeleOp**.
+
+**Launcher Check** runs the launcher alone, with the robot not driven. Hold the right bumper to
+fire at the target the Driver Station shows: the launcher spins up, and the windmill feeds once it
+is fast enough. The D-pad changes the target. Each loop, here and in StarterBot TeleOp, the flight
+log carries `launcher/target_tps`, `launcher/measured_tps`, `launcher/current_amps` and
+`launcher/feeding`, spinning or stopped; graph them together in AdvantageScope to see whether it
+holds its speed.
+
+The OpModes generally send the flight log live to AdvantageScope as well, for practice;
+[NETWORKTABLES.md](./NETWORKTABLES.md) says how to connect, and why not at a competition.
+
+The Robot Controller name picks the robot: one starting 88888, 37523 or 31459, such as 88888-RC,
+picks that robot. On a Robot Controller name that starts with none of them, and in the simulator
+and the tests, `thisRobot` in `pedro/Constants.java` picks it; set it to the robot the code is
+going onto, with 37523 the default. Each robot's values are in its own file in `pedro`,
+`Bot88888`, `Bot37523` or `Bot31459`.
+
 ### TODO 
 - [ ] Monitor the sloth plugin for updates to Gradle version [see](PANELS.md#one-time-setup) - 1. Gradle version
 
@@ -12,6 +99,7 @@ the 2026-27 BIOBUZZ season.
 - [pedropathing 3](https://pedropathing.com/)
 - [ivy](https://pedropathing.com/docs/ivy)
 - [panels](./PANELS.md)
+- [Lesson work and releases](./RELEASING.md)
 
 ## NOTICE
 
